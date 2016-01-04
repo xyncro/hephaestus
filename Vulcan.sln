@@ -3,8 +3,58 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sln", "sln", "{5844D341-72F0-423F-BC21-92EA62610D0B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{D6C84380-B29D-4C14-A116-6ACC8D19AD10}"
+	ProjectSection(SolutionItems) = preProject
+		build.cmd = build.cmd
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "paket", "paket", "{EB6DF2CB-CC54-40AF-AADB-0F930E06C8FF}"
+	ProjectSection(SolutionItems) = preProject
+		paket.dependencies = paket.dependencies
+		paket.lock = paket.lock
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{2828B2FC-4E5D-4BBD-94A2-9AC669F63EAB}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Vulcan", "src\Vulcan\Vulcan.fsproj", "{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "references", "references", "{8F02458E-1FAF-41CE-91E2-E4D974E9838D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{119A6C2F-2838-42B1-BECF-0B3BB48908ED}"
+	ProjectSection(SolutionItems) = preProject
+		src\Vulcan\Vulcan.fsproj.paket.references = src\Vulcan\Vulcan.fsproj.paket.references
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "templates", "templates", "{A68E377A-F444-4B33-AD6B-9C3DEFE5811F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{7C3CAB40-1AF3-4DD1-BCAB-8BF1AD80F710}"
+	ProjectSection(SolutionItems) = preProject
+		src\Vulcan\Vulcan.fsproj.paket.template = src\Vulcan\Vulcan.fsproj.paket.template
+	EndProjectSection
+EndProject
 Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D6C84380-B29D-4C14-A116-6ACC8D19AD10} = {5844D341-72F0-423F-BC21-92EA62610D0B}
+		{EB6DF2CB-CC54-40AF-AADB-0F930E06C8FF} = {5844D341-72F0-423F-BC21-92EA62610D0B}
+		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C} = {2828B2FC-4E5D-4BBD-94A2-9AC669F63EAB}
+		{8F02458E-1FAF-41CE-91E2-E4D974E9838D} = {EB6DF2CB-CC54-40AF-AADB-0F930E06C8FF}
+		{119A6C2F-2838-42B1-BECF-0B3BB48908ED} = {8F02458E-1FAF-41CE-91E2-E4D974E9838D}
+		{A68E377A-F444-4B33-AD6B-9C3DEFE5811F} = {EB6DF2CB-CC54-40AF-AADB-0F930E06C8FF}
+		{7C3CAB40-1AF3-4DD1-BCAB-8BF1AD80F710} = {A68E377A-F444-4B33-AD6B-9C3DEFE5811F}
 	EndGlobalSection
 EndGlobal
