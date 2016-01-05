@@ -34,6 +34,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{7C3CAB40-1AF
 		src\Vulcan\Vulcan.fsproj.paket.template = src\Vulcan\Vulcan.fsproj.paket.template
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{E278E51D-AB26-4B0C-B14B-AEA9D0D58FB7}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Vulcan.Console", "tests\Vulcan.Console\Vulcan.Console.fsproj", "{FFD26322-C55F-4A19-B932-9879C111599C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,6 +48,10 @@ Global
 		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{362AE10C-AF1B-4D4E-B9B3-B5956040F62C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FFD26322-C55F-4A19-B932-9879C111599C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFD26322-C55F-4A19-B932-9879C111599C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FFD26322-C55F-4A19-B932-9879C111599C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FFD26322-C55F-4A19-B932-9879C111599C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -56,5 +64,6 @@ Global
 		{119A6C2F-2838-42B1-BECF-0B3BB48908ED} = {8F02458E-1FAF-41CE-91E2-E4D974E9838D}
 		{A68E377A-F444-4B33-AD6B-9C3DEFE5811F} = {EB6DF2CB-CC54-40AF-AADB-0F930E06C8FF}
 		{7C3CAB40-1AF3-4DD1-BCAB-8BF1AD80F710} = {A68E377A-F444-4B33-AD6B-9C3DEFE5811F}
+		{FFD26322-C55F-4A19-B932-9879C111599C} = {E278E51D-AB26-4B0C-B14B-AEA9D0D58FB7}
 	EndGlobalSection
 EndGlobal
