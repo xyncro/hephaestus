@@ -151,23 +151,23 @@ module Graphs =
 
         (* Types
 
-           A translation graph, parameterized by state type, and by the type
+           A translated graph, parameterized by state type, and by the type
            of the configuration data which will be passed to translation
            decisions to effectively reify to a Vulcan Decision.
 
-           Translation graphs are the result of the Translation translation from the Vulcan
+           Translated graphs are the result of the translation from the Vulcan
            Component model to a more general graph model. *)
 
-        type TranslationGraph<'c,'s> =
-            | Graph of TranslationGraphType<'c,'s>
+        type TranslatedGraph<'c,'s> =
+            | Graph of TranslatedGraphType<'c,'s>
 
-            static member graph_ : Isomorphism<TranslationGraph<'c,'s>,TranslationGraphType<'c,'s>> =
+            static member graph_ : Isomorphism<TranslatedGraph<'c,'s>,TranslatedGraphType<'c,'s>> =
                 (fun (Graph x) -> x), (Graph)
 
-         and TranslationGraphType<'c,'s> =
-            Graph<string,TranslationNode<'c,'s>,Common.Edge>
+         and TranslatedGraphType<'c,'s> =
+            Graph<string,TranslatedNode<'c,'s>,Common.Edge>
 
-         and TranslationNode<'c,'s> =
+         and TranslatedNode<'c,'s> =
             | Node of Common.Node<'s>
             | Configure of VulcanDecisionConfigurator<'c,'s>
 
@@ -220,7 +220,7 @@ module Graphs =
            a configured graph. *)
 
         let private (|Node|_|) =
-            function | Translation.TranslationNode.Node n -> Some n
+            function | Translation.Node n -> Some n
                      | _ -> None
 
         let private (|Configure|_|) =
@@ -228,7 +228,7 @@ module Graphs =
                      | _ -> None
 
         let configure<'c,'s> configuration =
-                Optic.get (Lens.ofIsomorphism Translation.TranslationGraph<'c,'s>.graph_)
+                Optic.get (Lens.ofIsomorphism Translation.TranslatedGraph<'c,'s>.graph_)
              >> Graph.Nodes.map (fun _ ->
                     function | Node node -> Node node
                              | Configure configure -> Decision (configure configuration)
