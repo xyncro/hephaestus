@@ -47,4 +47,9 @@ let main _ =
     let translated = Translation.translate protocol
     let configured = Configuration.configure { AllowEven = false } translated
 
+    printfn "translated:\n%A\n" translated
+    printfn "configured:\n%A\n" configured
+
+    let _ = System.Console.ReadLine ()
+
     0

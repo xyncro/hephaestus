@@ -4,6 +4,14 @@ open System
 open Aether
 open Hekate
 
+// TODO: Graph root model
+// TODO: Specification package model
+// TODO: Specification composition model (append, prepend, splice)
+// TODO: Dependency and pre/post-condition analysis
+// TODO: Optimization
+// TODO: Machine wrapper
+// TODO: Logging/Introspection mechanisms
+
 (* Notes
 
    Type parameter names are used consistently:
@@ -161,6 +169,8 @@ module Graphs =
     [<RequireQualifiedAccess>]
     module Common =
 
+        // TODO: Determine if Empty edge still required
+
         type Node<'s> =
             | Terminal of Vulcan<unit,'s>
 
@@ -202,12 +212,26 @@ module Graphs =
            representation of the equivalent (unmodified) decision graph, prior
            to applying instance specific configuration to the graph. *)
 
+        let private left =
+            Common.Value Left
+
+        let private right =
+            Common.Value Right
+
+        let private cn =
+            function | Decision (n, _, _)
+                     | Terminal (n, _) -> n
+
         let rec private nodes ns =
             function | Decision (n, c, (l, r)) -> (n, Configure c) :: nodes [] l @ nodes [] r @ ns
                      | Terminal (n, f) -> (n, Node (Common.Terminal f)) :: ns
 
+        let rec private edges es =
+            function | Decision (n, _, (l, r)) -> (n, cn l, left) :: (n, cn r, right) :: edges [] l @ edges [] r @ es
+                     | Terminal _ -> es
+
         let translate c =
-            Graph (Graph.create (nodes [] c) [])
+            Graph (Graph.create (nodes [] c) (edges [] c))
 
     (* Configuration *)
 
@@ -245,18 +269,9 @@ module Graphs =
            Functions for applying configuration data to an unconfigured graph,
            giving a configured graph. *)
 
-        let private (|Node|_|) =
-            function | Translation.Node n -> Some n
-                     | _ -> None
-
-        let private (|Configure|_|) =
-            function | Translation.Configure c -> Some c
-                     | _ -> None
-
         let configure<'c,'s> configuration =
                 Optic.get (Lens.ofIsomorphism Translation.TranslatedGraph<'c,'s>.graph_)
              >> Graph.Nodes.map (fun _ ->
-                    function | Node node -> Node node
-                             | Configure configure -> Decision (configure configuration)
-                             | _ -> failwith "")
+                    function | Translation.Node n -> Node n
+                             | Translation.Configure f -> Decision (f configuration))
              >> Graph
