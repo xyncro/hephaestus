@@ -13,9 +13,9 @@ open Hekate
 (* Types
 
    Core Vulcan types of various classifications, representing the common
-   building blocks of Vulcan machinery which will regularly be exposed to
-   users of the Vulcan system (i.e. those designing and implementing
-   Vulcan components. *)
+   building blocks of Vulcan machinery which will regularly be exposed to users
+   of the Vulcan system (i.e. those designing and implementing Vulcan
+   components. *)
 
 (* Core *)
 
@@ -43,91 +43,115 @@ type VulcanDecision<'s> =
 type VulcanDecisionConfigurator<'c,'s> =
     'c -> VulcanDecision<'s>
 
-(* Components
+(* Specifications
 
-   The Vulcan Component model, a highly restricted abstraction of the
+   The Vulcan Specification model, a highly restricted abstraction of the
    conceptual decision graph, allowing only binary (Left|Right) Decisions or
-   Terminals to exist as a Component of a graph (where the left and right case
-   of a Decision is - recursively - a Component).
+   Terminals to exist as a Specification of a graph (where the left and right
+   case of a Decision is - recursively - a Specification).
 
-   This allows for graphs to be
-   defined (including graphs with cycles if required through the use of rec
-   bindings) and defined as reusable elements where convenient. *)
+   This allows for graphs to be defined (including graphs with cycles if
+   required through the use of rec bindings) and defined as reusable elements
+   where convenient. *)
 
 [<AutoOpen>]
-module Components =
+module Specifications =
 
     (* Types
 
-       Types for a component model of a decision graph, using two simple primitive
-       types from which any decision graph can be constructed and optimized,
-       etc. *)
+       Types for a specification model of a decision graph, using two simple
+       primitive types from which any decision graph can be constructed and
+       optimized, etc. *)
 
-    type VulcanComponent<'c,'s> =
-        | Decision of VulcanComponentDecision<'c,'s>
-        | Terminal of VulcanComponentTerminal<'s>
+    type VulcanSpecification<'c,'s> =
+        | Decision of VulcanSpecificationDecision<'c,'s>
+        | Terminal of VulcanSpecificationTerminal<'s>
 
-        static member decision_ : Epimorphism<VulcanComponent<'c,'s>,VulcanComponentDecision<'c,'s>> =
+        static member decision_ : Epimorphism<VulcanSpecification<'c,'s>,VulcanSpecificationDecision<'c,'s>> =
             (function | Decision d -> Some d
                       | _ -> None), (Decision)
 
-        static member terminal_ : Epimorphism<VulcanComponent<'c,'s>,VulcanComponentTerminal<'s>> =
+        static member terminal_ : Epimorphism<VulcanSpecification<'c,'s>,VulcanSpecificationTerminal<'s>> =
             (function | Terminal t -> Some t
                       | _ -> None), (Terminal)
 
-     and VulcanComponentDecision<'c,'s> =
-        string * VulcanDecisionConfigurator<'c,'s> * (VulcanComponent<'c,'s> * VulcanComponent<'c,'s>)
+     and VulcanSpecificationDecision<'c,'s> =
+        string * VulcanDecisionConfigurator<'c,'s> * (VulcanSpecification<'c,'s> * VulcanSpecification<'c,'s>)
 
-     and VulcanComponentTerminal<'s> =
+     and VulcanSpecificationTerminal<'s> =
         string * Vulcan<unit,'s>
 
-    (* Decisions
+    (* Specification
 
-       Helpful shorthand functions for creating decisions, including literal decisions
-       where the decision of Left or Right is known at compile time, and the unselected
-       decision is assigned a simple null terminal.
-
-       This can be useful for defining components which effectively act as a pipeline
-       and only one logical connection point is coherent for the end user of the
-       component. It is assumed that dead (unreachable) paths will be optimized out
-       of the final executable form of the resultant decision graph in general use. *)
+       The Vulcan user API for working with specifications, including specific
+       functionality for working at the Decision and Terminal level, and for
+       working with modifications and compositions at the specification level,
+       enabling the combination of multiple specifications, given dependencies,
+       precedence, pre/post-conditions, etc. *)
 
     [<RequireQualifiedAccess>]
-    module Decision =
+    module Specification =
 
-        let private configure value =
-            fun _ -> Literal value
+        (* Decisions
 
-        let private terminal () =
-            Terminal (sprintf "terminal.%A" (Guid.NewGuid ()), fun s -> async { return (), s })
+           Helpful shorthand functions for creating decisions, including literal
+           decisions where the decision of Left or Right is known at compile
+           time, and the unselected decision is assigned a simple null terminal.
 
-        let decision name configure left right =
-            Decision (name, configure, (left, right))
+           This can be useful for defining components which effectively act as a
+           pipeline and only one logical connection point is coherent for the
+           end user of the component. It is assumed that dead (unreachable) paths
+           will be optimized out of the final executable form of the resultant
+           decision graph in general use. *)
 
-        let left name left =
-            Decision (name, configure Left, (left, terminal ()))
+        [<RequireQualifiedAccess>]
+        module Decision =
 
-        let right name right =
-            Decision (name, configure Right, (terminal (), right))
+            let private configure value =
+                fun _ -> Literal value
 
-    (* Terminals *)
+            let private terminal () =
+                Terminal (sprintf "%A" (Guid.NewGuid ()), fun s -> async { return (), s })
 
-    [<RequireQualifiedAccess>]
-    module Terminal =
+            /// Create a new named decision, given a suitable configuration
+            /// function and specifications for the subsequent left and right
+            /// trees.
+            let create name configure left right =
+                Decision (name, configure, (left, right))
 
-        let terminal name f =
-            Terminal (name, f)
+            /// Create a new named left decision, which will always evaluate to
+            /// Left, and where the specification of the right tree will be an
+            /// effective no-operation terminal.
+            let left name left =
+                Decision (name, configure Left, (left, terminal ()))
+
+            /// Create a new named right decision, which will always evaluate to
+            /// Right, and where the specification of the left tree will be an
+            /// effective no-operation terminal.
+            let right name right =
+                Decision (name, configure Right, (terminal (), right))
+
+        [<RequireQualifiedAccess>]
+        module Terminal =
+
+            /// Create a new named terminal, given a Vulcan function returning
+            /// unit, and with the appropriate state type.
+            let create name f =
+                Terminal (name, f)
 
 (* Graphs
 
-   The Vulcan Graph implementation, turning the logical Vulcan Component representation
-   of a decision graph in to an optimized executable form (given appropriate
-   configuration data to configure a graph before optimization).
-   
+   The Vulcan Graph implementation, turning the logical Vulcan Specification
+   representation of a decision graph in to an optimized executable form (given
+   appropriate configuration data to configure a graph before optimization).
+
    The resultant graph effectively behaves as an Async State monad while being
-   transparent and modifiable - potentially supporting differing forms of optimization,
-   error handling etc. via mapping of the graph (including a possible plugin model
-   which would act as a "plugin-based graph compiler"). *)
+   transparent and modifiable - potentially supporting differing forms of
+   optimization, error handling etc. via mapping of the graph (including a
+   possible plugin model which would act as a "plugin-based graph compiler").
+
+   The graph implementation is not a Vulcan user-facing API, and is wrapped
+   within the Machine API. *)
 
 [<AutoOpen>]
 module Graphs =
@@ -151,12 +175,13 @@ module Graphs =
 
         (* Types
 
-           A translated graph, parameterized by state type, and by the type
-           of the configuration data which will be passed to translation
-           decisions to effectively reify to a Vulcan Decision.
+           A translated graph, parameterized by state type, and by the type of
+           the configuration data which will be passed to translation decisions
+           to effectively reify to a Vulcan Decision.
 
            Translated graphs are the result of the translation from the Vulcan
-           Component model to a more general graph model. *)
+           Specification model to a phase of the pipeline to produce an
+           executable graph model. *)
 
         type TranslatedGraph<'c,'s> =
             | Graph of TranslatedGraphType<'c,'s>
@@ -173,9 +198,9 @@ module Graphs =
 
         (* Translation
 
-           Functions for translating a Vulcan Component to a graph based representation
-           of the equivalent (unmodified) decision graph, prior to applying instance specific
-           configuration to the graph. *)
+           Functions for translating a Vulcan Specification to a graph based
+           representation of the equivalent (unmodified) decision graph, prior
+           to applying instance specific configuration to the graph. *)
 
         let rec private nodes ns =
             function | Decision (n, c, (l, r)) -> (n, Configure c) :: nodes [] l @ nodes [] r @ ns
@@ -186,6 +211,7 @@ module Graphs =
 
     (* Configuration *)
 
+    [<RequireQualifiedAccess>]
     module Configuration =
 
         (* Types
@@ -216,8 +242,8 @@ module Graphs =
 
         (* Configuration
 
-           Functions for applying configuration data to an unconfigured graph, giving
-           a configured graph. *)
+           Functions for applying configuration data to an unconfigured graph,
+           giving a configured graph. *)
 
         let private (|Node|_|) =
             function | Translation.Node n -> Some n
@@ -233,4 +259,4 @@ module Graphs =
                     function | Node node -> Node node
                              | Configure configure -> Decision (configure configuration)
                              | _ -> failwith "")
-             >> ConfiguredGraph<'s>.Graph
+             >> Graph

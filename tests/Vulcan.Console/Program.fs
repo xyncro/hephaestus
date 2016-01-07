@@ -15,7 +15,7 @@ type ExampleState =
 (* Terminals *)
 
 let printer name =
-    Terminal.terminal name (fun s ->
+    Specification.Terminal.create name (fun s ->
         async {
             printfn "%s Value: %i" name s.Value
             return (), s })
@@ -23,7 +23,7 @@ let printer name =
 (* Decisions *)
 
 let filterEven =
-    Decision.decision "filter even" (fun configuration ->
+    Specification.Decision.create "filter even" (fun configuration ->
         match configuration.AllowEven with
         | true ->
             Literal Right
@@ -44,7 +44,7 @@ let protocol =
 [<EntryPoint>]
 let main _ =
 
-    let translated = Graphs.Translation.translate protocol
-    let configured = Graphs.Configuration.configure { AllowEven = false } translated
+    let translated = Translation.translate protocol
+    let configured = Configuration.configure { AllowEven = false } translated
 
     0
