@@ -4,7 +4,6 @@ open System
 open Aether
 open Hekate
 
-// TODO: Graph root model
 // TODO: Specification package model
 // TODO: Specification composition model (append, prepend, splice)
 // TODO: Dependency and pre/post-condition analysis
@@ -139,6 +138,12 @@ module Specifications =
             let right name right =
                 Decision (name, configure Right, (terminal (), right))
 
+        (* Terminals
+
+           Helpful shorthand functions for working with terminals, namely a
+           function for creating a new named terminal given a Vulcan function
+           of unit. *)
+
         [<RequireQualifiedAccess>]
         module Terminal =
 
@@ -146,6 +151,47 @@ module Specifications =
             /// unit, and with the appropriate state type.
             let create name f =
                 Terminal (name, f)
+
+        (* Helpers *)
+
+        let (|SpecificationName|) =
+            function | Decision (n, _, _) -> n
+                     | Terminal (n, _) -> n
+
+        (* Operations*)
+
+        type VulcanSpecificationOperation<'c,'s> =
+            | Prepend of VulcanSpecificationMap<'c,'s>
+            | Splice of string * VulcanDecisionValue * VulcanSpecificationMap<'c,'s>
+
+         and VulcanSpecificationMap<'c,'s> =
+            VulcanSpecification<'c,'s> -> VulcanSpecification<'c,'s>
+
+(* Modules
+
+   The Vulcan Module implementation, providing a way to package and share a
+   Specification via operations on the existing state of a notional
+   specification, along with metadata relating to that specification, such
+   as name, description, etc. plus technical metadata such as dependencies
+   and precedence according to the module composition model. *)
+
+[<AutoOpen>]
+module Modules =
+
+    (* Types *)
+
+    type VulcanModule<'c,'s> =
+        { Metadata: VulcanModuleMetadata
+          Requirements: VulcanModuleRequirements
+          Operations: Specification.VulcanSpecificationOperation<'c,'s> list }
+
+     and VulcanModuleMetadata =
+        { Name: string
+          Description: string option }
+
+     and VulcanModuleRequirements =
+        { Required: string list
+          Preconditions: string list }
 
 (* Graphs
 
@@ -159,7 +205,7 @@ module Specifications =
    possible plugin model which would act as a "plugin-based graph compiler").
 
    The graph implementation is not a Vulcan user-facing API, and is wrapped
-   within the Machine API. *)
+   within the Vulcan Machine API. *)
 
 [<AutoOpen>]
 module Graphs =
@@ -169,14 +215,17 @@ module Graphs =
     [<RequireQualifiedAccess>]
     module Common =
 
-        // TODO: Determine if Empty edge still required
+        let [<Literal>] RootKey =
+            "root"
 
         type Node<'s> =
+            | Root
             | Terminal of Vulcan<unit,'s>
 
          and Edge =
-            | Empty
+            | Undefined
             | Value of VulcanDecisionValue
+
 
     (* Translation *)
 
@@ -218,20 +267,22 @@ module Graphs =
         let private right =
             Common.Value Right
 
-        let private cn =
-            function | Decision (n, _, _)
-                     | Terminal (n, _) -> n
+        let private sn =
+            Specification.(|SpecificationName|)
 
         let rec private nodes ns =
             function | Decision (n, c, (l, r)) -> (n, Configure c) :: nodes [] l @ nodes [] r @ ns
                      | Terminal (n, f) -> (n, Node (Common.Terminal f)) :: ns
 
         let rec private edges es =
-            function | Decision (n, _, (l, r)) -> (n, cn l, left) :: (n, cn r, right) :: edges [] l @ edges [] r @ es
+            function | Decision (n, _, (l, r)) -> (n, sn l, left) :: (n, sn r, right) :: edges [] l @ edges [] r @ es
                      | Terminal _ -> es
 
-        let translate c =
-            Graph (Graph.create (nodes [] c) (edges [] c))
+        let translate s =
+            Graph (
+                Graph.create
+                    ((Common.RootKey, Node Common.Root) :: nodes [] s)
+                    ((Common.RootKey, sn s, Common.Undefined) :: edges [] s))
 
     (* Configuration *)
 
