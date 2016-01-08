@@ -26,7 +26,7 @@ module HttpCore =
 
     (* Decisions *)
 
-    let serviceAvailable =
+    let private serviceAvailable =
         Specification.Decision.create "service available?" (fun configuration ->
             match configuration.ServiceAvailable with
             | None ->
@@ -45,12 +45,12 @@ module HttpCore =
 
     (* Module *)
 
-    let httpCoreModule =
+    let exports =
         { Metadata =
             { Name = "http.core"
               Description = None }
           Requirements =
-            { Required = []
+            { Required = set []
               Preconditions = [] }
           Operations =
             [ Specification.Prepend (fun _ -> httpCore) ] }
@@ -59,7 +59,7 @@ module HttpOptions =
 
     (* Decisions *)
 
-    let methodOptions =
+    let private methodOptions =
         Specification.Decision.create "method options?" (fun (_: HttpConfiguration) ->
             Function (fun state ->
                 async {
@@ -74,46 +74,24 @@ module HttpOptions =
 
     (* Module *)
 
-    let httpOptionsModule =
+    let exports =
         { Metadata =
             { Name = "http.options"
               Description = None }
           Requirements =
-            { Required = [ "http.core" ]
-              Preconditions = [] } 
+            { Required = set [ "http.core" ]
+              Preconditions = [] }
           Operations =
             [ Specification.Splice ("service available?", Right, httpOptions) ] }
-
-(* Operations *)
-
-let private prepend f specification =
-    f specification
-
-let private splice name value f specification =
-    specification
-
-let apply s =
-    function | Specification.Prepend (f) -> prepend f s
-             | Specification.Splice (n, v, f) -> splice n v f s
-
-
-
-
 
 (* Main *)
 
 [<EntryPoint>]
 let main _ =
 
-    let translated = Translation.translate HttpCore.httpCore
-    let configured = Configuration.configure { ServiceAvailable = Some true } translated
-    
-    let operations = HttpCore.httpCoreModule.Operations @ HttpOptions.httpOptionsModule.Operations
-    let composed = List.fold apply (Specification.Terminal.create "" (fun s -> async { return (), s })) operations
+    let composition = Module.compose (set [ HttpOptions.exports; HttpCore.exports ])
 
-    printfn "translated:\n%A\n" translated
-    printfn "configured:\n%A\n" configured
-    printfn "composed:\n%A\n" composed
+    printfn "composition:\n%A\n" composition
 
     let _ = System.Console.ReadLine ()
 

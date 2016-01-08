@@ -2,20 +2,45 @@
 
 open System
 open Aether
+open Aether.Operators
 open Hekate
 
-// TODO: Specification package model
 // TODO: Specification composition model (append, prepend, splice)
-// TODO: Dependency and pre/post-condition analysis
+// TODO: Pre/post-condition analysis
 // TODO: Optimization
 // TODO: Machine wrapper
 // TODO: Logging/Introspection mechanisms
 
 (* Notes
 
-   Type parameter names are used consistently:
+   Type parameter names throughout the Vulcan implementation are used
+   consistently, single character parameter names representing two specific
+   concepts:
    - 'c for the type of Configuration
    - 's for the type of State *)
+
+(* Prelude *)
+
+[<AutoOpen>]
+module internal Prelude =
+
+    (* Equality/Comparison
+
+       Functions for simplifying the customization of equality
+       and comparison on types where this is required. *)
+
+    let equalsOn f x (y: obj) =
+        match y with
+        | :? 'T as y -> (f x) = (f y)
+        | _ -> false
+ 
+    let hashOn f x =
+        hash (f x)
+ 
+    let compareOn f x (y: obj) =
+        match y with
+        | :? 'T as y -> compare (f x) (f y)
+        | _ -> invalidArg "y" "cannot compare values of different types"
 
 (* Types
 
@@ -49,6 +74,12 @@ type VulcanDecision<'s> =
 
 type VulcanDecisionConfigurator<'c,'s> =
     'c -> VulcanDecision<'s>
+
+(* Results *)
+
+type VulcanResult<'a> =
+    | Success of 'a
+    | Failure of string
 
 (* Specifications
 
@@ -117,8 +148,10 @@ module Specifications =
             let private configure value =
                 fun _ -> Literal value
 
+            // TODO: Investigate what happens when this just becomes Terminal.empty
+
             let private terminal () =
-                Terminal (sprintf "%A" (Guid.NewGuid ()), fun s -> async { return (), s })
+                Terminal (sprintf "%A" (Guid.NewGuid ()), fun s -> async.Return ((), s))
 
             /// Create a new named decision, given a suitable configuration
             /// function and specifications for the subsequent left and right
@@ -152,6 +185,10 @@ module Specifications =
             let create name f =
                 Terminal (name, f)
 
+            /// Create a new unnamed terminal with a no-op Vulcan function.
+            let empty =
+                Terminal ("", fun s -> async { return (), s })
+
         (* Helpers *)
 
         let (|SpecificationName|) =
@@ -178,20 +215,172 @@ module Specifications =
 [<AutoOpen>]
 module Modules =
 
-    (* Types *)
+    (* Types
 
-    type VulcanModule<'c,'s> =
+       Types defining an individual Vulcan Module (pre-composition) and a
+       Vulcan Module Composition, the combined result of a set of orderable
+       Vulcan Modules, and including metadata from each in a meaningful way.
+
+       The list of constituent Vulcan Modules represents the applied
+       ordering. *)
+
+    type VulcanModuleComposition<'c,'s> =
+        { Modules: VulcanModuleMetadata list
+          Specification: Specifications.VulcanSpecification<'c,'s> }
+
+     and VulcanModule<'c,'s> =
         { Metadata: VulcanModuleMetadata
           Requirements: VulcanModuleRequirements
           Operations: Specification.VulcanSpecificationOperation<'c,'s> list }
+
+        static member metadata_ : Lens<VulcanModule<'c,'s>,VulcanModuleMetadata> =
+            (fun x -> x.Metadata), (fun m x -> { x with Metadata = m })
+
+        static member requirements_ : Lens<VulcanModule<'c,'s>,VulcanModuleRequirements> =
+            (fun x -> x.Requirements), (fun r x -> { x with Requirements = r })
+
+        static member operations_ : Lens<VulcanModule<'c,'s>,Specification.VulcanSpecificationOperation<'c,'s> list> =
+            (fun x -> x.Operations), (fun o x -> { x with Operations = o })
+
+        static member private Comparable (x: VulcanModule<'c,'s>) =
+            x.Metadata.Name.ToLowerInvariant ()
+
+        override x.Equals y =
+            equalsOn VulcanModule<_,_>.Comparable x y
+
+        override x.GetHashCode () =
+            hashOn VulcanModule<_,_>.Comparable x
+
+        interface IComparable with
+
+            member x.CompareTo y =
+                compareOn VulcanModule<_,_>.Comparable x y
 
      and VulcanModuleMetadata =
         { Name: string
           Description: string option }
 
+        static member name_ =
+            (fun x -> x.Name), (fun n x -> { x with Name = n })
+
      and VulcanModuleRequirements =
-        { Required: string list
+        { Required: Set<string>
           Preconditions: string list }
+
+        static member required_ =
+            (fun x -> x.Required), (fun r x -> { x with Required = r })
+
+    (* Order
+
+       Functions to order a set of Vulcan Modules given the defined dependencies
+       as supplied in the Vulcan Module Requirements. An ordering may or may not
+       be possible, as represented by the use of the Vulcan Result type.
+
+       The implementation is a simple topological sort using Kahn's algorithm,
+       made simpler by the fact that Hekate will automatically handle the
+       removal of appropriate edges on node removal. *)
+
+    [<RequireQualifiedAccess>]
+    module internal Order =
+
+        let private nodes<'c,'s> =
+                List.map (fun m ->
+                    Optic.get (
+                            VulcanModule<'c,'s>.metadata_ 
+                        >-> VulcanModuleMetadata.name_) m, m)
+
+        let private edges<'c,'s> =
+                List.map (fun m ->
+                    Optic.get (VulcanModule<'c,'s>.metadata_ >-> VulcanModuleMetadata.name_) m,
+                    Optic.get (VulcanModule<'c,'s>.requirements_ >-> VulcanModuleRequirements.required_) m)
+             >> List.map (fun (n, rs) ->
+                    List.map (fun n' -> n', n, ()) (Set.toList rs))
+             >> List.concat
+
+        let private graph<'c,'s> modules =
+            Graph.create (nodes<'c,'s> modules) (edges<'c,'s> modules)
+
+        let private independent graph =
+            Graph.Nodes.toList graph
+            |> List.tryFind (fun (v, _) -> Graph.Nodes.inwardDegree v graph = Some 0)
+            |> Option.map (fun (v, l) -> l, Graph.Nodes.remove v graph)
+
+        let rec private order modules graph =
+            match independent graph with
+            | Some (m, graph) -> order (modules @ [ m ]) graph
+            | _ when Graph.isEmpty graph -> Success modules
+            | _ -> Failure "A valid Vulcan Module order cannot be determined."
+
+        let apply<'c,'s> =
+                Set.toList
+             >> graph<'c,'s>
+             >> order []
+
+    (* Operation
+
+       Functions to process the logical operations defined on Vulcan
+       Specifications, combining two specifications in specific and controlled
+       ways. *)
+
+    [<RequireQualifiedAccess>]
+    module internal Operation =
+
+        type private M<'c,'s> =
+            Specification.VulcanSpecificationMap<'c,'s>
+
+        let private prepend<'c,'s> (f: M<'c,'s>) specification =
+            f specification
+
+        // TODO: Test and fix this in the case of cyclic specifications
+
+        let rec private splice<'c,'s> name value (f: M<'c,'s>) specification =
+            match specification with
+            | Decision (n, c, (l, r)) when n = name && value = Left -> Decision (n, c, (f l, r))
+            | Decision (n, c, (l, r)) when n = name && value = Right -> Decision (n, c, (l, f r))
+            | Decision (n, c, (l, r)) -> Decision (n, c, (splice name value f l, splice name value f r))
+            | Terminal (n, f) -> Terminal (n, f)
+
+        let apply<'c,'s> specification =
+            function | Specification.Prepend (f) -> prepend<'c,'s> f specification
+                     | Specification.Splice (n, v, f) -> splice<'c,'s> n v f specification
+
+    (* Composition
+
+       Functions for combining a set of Vulcan Modules to produce a Vulcan
+       Module Composition, detailing the ordered metadata of the Modules used
+       to create the composition, and the resulting Vulcan Specification. *)
+
+    [<RequireQualifiedAccess>]
+    module internal Composition =
+
+        let private modules<'c,'s> =
+                List.map (fun m ->
+                    Optic.get VulcanModule<'c,'s>.metadata_ m)
+
+        let private specification<'c,'s> =
+                List.map (fun m ->
+                    Optic.get VulcanModule<'c,'s>.operations_ m)
+             >> List.concat
+             >> List.fold Operation.apply Specification.Terminal.empty
+
+        let apply<'c,'s> m =
+            { Modules = modules m
+              Specification = specification<'c,'s> m }
+
+    (* Module
+
+       The Vulcan user API for working with Modules, specifically the
+       composition of Vulcan Modules to Vulcan Module Compositions. This
+       function may fail for various logical reasons and so the return
+       type is represented as a Vulcan Result. *)
+
+    [<RequireQualifiedAccess>]
+    module Module =
+
+        let compose modules =
+            match Order.apply modules with
+            | Success modules -> Success (Composition.apply modules)
+            | Failure f -> Failure f
 
 (* Graphs
 
@@ -208,7 +397,7 @@ module Modules =
    within the Vulcan Machine API. *)
 
 [<AutoOpen>]
-module Graphs =
+module internal Graphs =
 
     (* Common *)
 
@@ -225,7 +414,6 @@ module Graphs =
          and Edge =
             | Undefined
             | Value of VulcanDecisionValue
-
 
     (* Translation *)
 
