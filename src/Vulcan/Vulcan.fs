@@ -5,7 +5,6 @@ open Aether
 open Aether.Operators
 open Hekate
 
-// TODO: Specification composition model (append, prepend, splice)
 // TODO: Pre/post-condition analysis
 // TODO: Optimization
 // TODO: Machine wrapper
@@ -114,10 +113,10 @@ module Specifications =
                       | _ -> None), (Terminal)
 
      and VulcanSpecificationDecision<'c,'s> =
-        string * VulcanDecisionConfigurator<'c,'s> * (VulcanSpecification<'c,'s> * VulcanSpecification<'c,'s>)
+        string list * VulcanDecisionConfigurator<'c,'s> * (VulcanSpecification<'c,'s> * VulcanSpecification<'c,'s>)
 
      and VulcanSpecificationTerminal<'s> =
-        string * Vulcan<unit,'s>
+        string list * Vulcan<unit,'s>
 
     (* Specification
 
@@ -145,13 +144,16 @@ module Specifications =
         [<RequireQualifiedAccess>]
         module Decision =
 
+            let private name () =
+                [ string (Guid.NewGuid ()) ]
+
             let private configure value =
                 fun _ -> Literal value
 
             // TODO: Investigate what happens when this just becomes Terminal.empty
 
             let private terminal () =
-                Terminal (sprintf "%A" (Guid.NewGuid ()), fun s -> async.Return ((), s))
+                Terminal (name (), fun s -> async.Return ((), s))
 
             /// Create a new named decision, given a suitable configuration
             /// function and specifications for the subsequent left and right
@@ -187,7 +189,7 @@ module Specifications =
 
             /// Create a new unnamed terminal with a no-op Vulcan function.
             let empty =
-                Terminal ("", fun s -> async { return (), s })
+                Terminal ([], fun s -> async { return (), s })
 
         (* Helpers *)
 
@@ -199,7 +201,7 @@ module Specifications =
 
         type VulcanSpecificationOperation<'c,'s> =
             | Prepend of VulcanSpecificationMap<'c,'s>
-            | Splice of string * VulcanDecisionValue * VulcanSpecificationMap<'c,'s>
+            | Splice of string list * VulcanDecisionValue * VulcanSpecificationMap<'c,'s>
 
          and VulcanSpecificationMap<'c,'s> =
             VulcanSpecification<'c,'s> -> VulcanSpecification<'c,'s>
@@ -332,6 +334,7 @@ module Modules =
             f specification
 
         // TODO: Test and fix this in the case of cyclic specifications
+        // TODO: Test and fix this in the case of duplicate specification names
 
         let rec private splice<'c,'s> name value (f: M<'c,'s>) specification =
             match specification with
@@ -404,8 +407,8 @@ module internal Graphs =
     [<RequireQualifiedAccess>]
     module Common =
 
-        let [<Literal>] RootKey =
-            "root"
+        let RootName =
+            [ "root" ]
 
         type Node<'s> =
             | Root
@@ -437,7 +440,7 @@ module internal Graphs =
                 (fun (Graph x) -> x), (Graph)
 
          and TranslatedGraphType<'c,'s> =
-            Graph<string,TranslatedNode<'c,'s>,Common.Edge>
+            Graph<string list,TranslatedNode<'c,'s>,Common.Edge>
 
          and TranslatedNode<'c,'s> =
             | Node of Common.Node<'s>
@@ -469,8 +472,8 @@ module internal Graphs =
         let translate s =
             Graph (
                 Graph.create
-                    ((Common.RootKey, Node Common.Root) :: nodes [] s)
-                    ((Common.RootKey, sn s, Common.Undefined) :: edges [] s))
+                    ((Common.RootName, Node Common.Root) :: nodes [] s)
+                    ((Common.RootName, sn s, Common.Undefined) :: edges [] s))
 
     (* Configuration *)
 
@@ -489,7 +492,7 @@ module internal Graphs =
                 (fun (Graph x) -> x), (Graph)
 
          and ConfiguredGraphType<'s> =
-            Graph<string,ConfiguredNode<'s>,Common.Edge>
+            Graph<string list,ConfiguredNode<'s>,Common.Edge>
 
          and ConfiguredNode<'s> =
             | Node of Common.Node<'s>
@@ -514,3 +517,10 @@ module internal Graphs =
                     function | Translation.Node n -> Node n
                              | Translation.Configure f -> Decision (f configuration))
              >> Graph
+
+(* Machines *)
+
+[<AutoOpen>]
+module Machines =
+
+    type X = unit

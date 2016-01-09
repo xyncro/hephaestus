@@ -2,6 +2,15 @@
 
 open Vulcan
 
+(* Classifications *)
+
+[<Literal>]
+let Decision =
+    "decision"
+
+let Response =
+    "response"
+
 (* Configuration *)
 
 type HttpConfiguration =
@@ -17,17 +26,24 @@ type HttpState =
 let response name =
     Specification.Terminal.create name (fun s ->
         async {
-            printfn "%s Method: %s" name s.Method
+            printfn "%A Method: %s" name s.Method
             return (), s })
 
 (* Core *)
 
 module HttpCore =
 
+    [<Literal>]
+    let Name =
+        "http.core"
+
     (* Decisions *)
 
+    let private decision name =
+        Specification.Decision.create [ Name; Decision; name ]
+
     let private serviceAvailable =
-        Specification.Decision.create "service available?" (fun configuration ->
+        decision "service.available" (fun configuration ->
             match configuration.ServiceAvailable with
             | None ->
                 Literal Right
@@ -38,16 +54,21 @@ module HttpCore =
                                | true -> Right, state
                                | _ -> Left, state }))
 
+    (* Responses *)
+
+    let private response name =
+        response [ Name; Response; name ]
+
     (* Composition *)
 
     let httpCore =
-        serviceAvailable (response "service unavailable") (response "ok")
+        serviceAvailable (response "service.unavailable") (response "ok")
 
     (* Module *)
 
     let exports =
         { Metadata =
-            { Name = "http.core"
+            { Name = Name
               Description = None }
           Requirements =
             { Required = set []
@@ -55,17 +76,31 @@ module HttpCore =
           Operations =
             [ Specification.Prepend (fun _ -> httpCore) ] }
 
+(* Options *)
+
 module HttpOptions =
+
+    [<Literal>]
+    let Name =
+        "http.options"
 
     (* Decisions *)
 
+    let private decision name =
+        Specification.Decision.create [ Name; Decision; name ]
+
     let private methodOptions =
-        Specification.Decision.create "method options?" (fun (_: HttpConfiguration) ->
+        decision "method.options" (fun (_: HttpConfiguration) ->
             Function (fun state ->
                 async {
                     return match state.Method with
                            | m when m = "options" -> Right, state
                            | _ -> Left, state }))
+
+    (* Responses *)
+
+    let private response name =
+        response [ Name; Response; name ]
 
     (* Composition *)
 
@@ -76,13 +111,13 @@ module HttpOptions =
 
     let exports =
         { Metadata =
-            { Name = "http.options"
+            { Name = Name
               Description = None }
           Requirements =
-            { Required = set [ "http.core" ]
+            { Required = set [ HttpCore.Name ]
               Preconditions = [] }
           Operations =
-            [ Specification.Splice ("service available?", Right, httpOptions) ] }
+            [ Specification.Splice ([ HttpCore.Name; Decision; "service.available" ], Right, httpOptions) ] }
 
 (* Main *)
 
