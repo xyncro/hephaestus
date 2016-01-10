@@ -55,6 +55,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "targets", "targets", "{2530
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Vulcan.Profile259", "targets\Vulcan.Profile259\Vulcan.Profile259.fsproj", "{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Vulcan.Tests", "tests\Vulcan.Tests\Vulcan.Tests.fsproj", "{CC1D3821-D718-49AC-B349-E4A0B114EC91}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -77,6 +79,10 @@ Global
 		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CC1D3821-D718-49AC-B349-E4A0B114EC91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CC1D3821-D718-49AC-B349-E4A0B114EC91}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC1D3821-D718-49AC-B349-E4A0B114EC91}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CC1D3821-D718-49AC-B349-E4A0B114EC91}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -94,5 +100,6 @@ Global
 		{394ACD70-7650-4795-8E2D-E9E3416C53D0} = {88E78EEB-533E-4747-994C-FDE749A37DEA}
 		{253082E5-C380-4FC3-8B12-D3D67065F8F0} = {8F02458E-1FAF-41CE-91E2-E4D974E9838D}
 		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1} = {88E78EEB-533E-4747-994C-FDE749A37DEA}
+		{CC1D3821-D718-49AC-B349-E4A0B114EC91} = {E278E51D-AB26-4B0C-B14B-AEA9D0D58FB7}
 	EndGlobalSection
 EndGlobal
