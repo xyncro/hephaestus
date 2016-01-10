@@ -64,7 +64,7 @@ module HttpCore =
     let httpCore =
         serviceAvailable (response "service.unavailable") (response "ok")
 
-    (* Module *)
+    (* Component *)
 
     let exports =
         { Metadata =
@@ -107,7 +107,7 @@ module HttpOptions =
     let httpOptions =
         fun x -> methodOptions x (response "options")
 
-    (* Module *)
+    (* Component *)
 
     let exports =
         { Metadata =
@@ -124,9 +124,23 @@ module HttpOptions =
 [<EntryPoint>]
 let main _ =
 
-    let composition = Module.compose (set [ HttpOptions.exports; HttpCore.exports ])
+    let configuration = { ServiceAvailable = None }
+    let state = { Method = "get" }
 
-    printfn "composition:\n%A\n" composition
+    let components = set [ HttpOptions.exports; HttpCore.exports ]
+    let create = Module.create components
+    let httpModule = create |> function | Success composition -> composition
+                                        | Failure f -> failwith f
+
+    printfn "http:\n%A\n" httpModule
+
+    let translated = Machines.Graphs.Translation.translate httpModule.Specification
+    let configured = Machines.Graphs.Configuration.configure configuration translated
+    let optimized = Machines.Graphs.Optimization.optimize configured
+
+    printfn "translated:\n%A\n" translated
+    printfn "configured:\n%A\n" configured
+    printfn "optimized:\n%A\n" optimized
 
     let _ = System.Console.ReadLine ()
 

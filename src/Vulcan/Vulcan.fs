@@ -6,7 +6,6 @@ open Aether.Operators
 open Hekate
 
 // TODO: Pre/post-condition analysis
-// TODO: Optimization
 // TODO: Machine wrapper
 // TODO: Logging/Introspection mechanisms
 
@@ -118,6 +117,12 @@ module Specifications =
      and VulcanSpecificationTerminal<'s> =
         string list * Vulcan<unit,'s>
 
+    (* Helpers *)
+
+    let internal (|SpecificationName|) =
+        function | Decision (n, _, _) -> n
+                 | Terminal (n, _) -> n
+
     (* Specification
 
        The Vulcan user API for working with specifications, including specific
@@ -128,50 +133,6 @@ module Specifications =
 
     [<RequireQualifiedAccess>]
     module Specification =
-
-        (* Decisions
-
-           Helpful shorthand functions for creating decisions, including literal
-           decisions where the decision of Left or Right is known at compile
-           time, and the unselected decision is assigned a simple null terminal.
-
-           This can be useful for defining components which effectively act as a
-           pipeline and only one logical connection point is coherent for the
-           end user of the component. It is assumed that dead (unreachable) paths
-           will be optimized out of the final executable form of the resultant
-           decision graph in general use. *)
-
-        [<RequireQualifiedAccess>]
-        module Decision =
-
-            let private name () =
-                [ string (Guid.NewGuid ()) ]
-
-            let private configure value =
-                fun _ -> Literal value
-
-            // TODO: Investigate what happens when this just becomes Terminal.empty
-
-            let private terminal () =
-                Terminal (name (), fun s -> async.Return ((), s))
-
-            /// Create a new named decision, given a suitable configuration
-            /// function and specifications for the subsequent left and right
-            /// trees.
-            let create name configure left right =
-                Decision (name, configure, (left, right))
-
-            /// Create a new named left decision, which will always evaluate to
-            /// Left, and where the specification of the right tree will be an
-            /// effective no-operation terminal.
-            let left name left =
-                Decision (name, configure Left, (left, terminal ()))
-
-            /// Create a new named right decision, which will always evaluate to
-            /// Right, and where the specification of the left tree will be an
-            /// effective no-operation terminal.
-            let right name right =
-                Decision (name, configure Right, (terminal (), right))
 
         (* Terminals
 
@@ -191,11 +152,41 @@ module Specifications =
             let empty =
                 Terminal ([], fun s -> async { return (), s })
 
-        (* Helpers *)
+        (* Decisions
 
-        let (|SpecificationName|) =
-            function | Decision (n, _, _) -> n
-                     | Terminal (n, _) -> n
+           Helpful shorthand functions for creating decisions, including literal
+           decisions where the decision of Left or Right is known at compile
+           time, and the unselected decision is assigned a simple null terminal.
+
+           This can be useful for defining components which effectively act as a
+           pipeline and only one logical connection point is coherent for the
+           end user of the component. It is assumed that dead (unreachable) paths
+           will be optimized out of the final executable form of the resultant
+           decision graph in general use. *)
+
+        [<RequireQualifiedAccess>]
+        module Decision =
+
+            let private configure value =
+                fun _ -> Literal value
+
+            /// Create a new named decision, given a suitable configuration
+            /// function and specifications for the subsequent left and right
+            /// trees.
+            let create name configure left right =
+                Decision (name, configure, (left, right))
+
+            /// Create a new named left decision, which will always evaluate to
+            /// Left, and where the specification of the right tree will be an
+            /// effective no-operation terminal.
+            let left name left =
+                Decision (name, configure Left, (left, Terminal.empty))
+
+            /// Create a new named right decision, which will always evaluate to
+            /// Right, and where the specification of the left tree will be an
+            /// effective no-operation terminal.
+            let right name right =
+                Decision (name, configure Right, (Terminal.empty, right))
 
         (* Operations*)
 
@@ -226,46 +217,46 @@ module Modules =
        The list of constituent Vulcan Modules represents the applied
        ordering. *)
 
-    type VulcanModuleComposition<'c,'s> =
-        { Modules: VulcanModuleMetadata list
+    type VulcanModule<'c,'s> =
+        { Components: VulcanComponentMetadata list
           Specification: Specifications.VulcanSpecification<'c,'s> }
 
-     and VulcanModule<'c,'s> =
-        { Metadata: VulcanModuleMetadata
-          Requirements: VulcanModuleRequirements
+     and VulcanComponent<'c,'s> =
+        { Metadata: VulcanComponentMetadata
+          Requirements: VulcanComponentRequirements
           Operations: Specification.VulcanSpecificationOperation<'c,'s> list }
 
-        static member metadata_ : Lens<VulcanModule<'c,'s>,VulcanModuleMetadata> =
+        static member metadata_ : Lens<VulcanComponent<'c,'s>,VulcanComponentMetadata> =
             (fun x -> x.Metadata), (fun m x -> { x with Metadata = m })
 
-        static member requirements_ : Lens<VulcanModule<'c,'s>,VulcanModuleRequirements> =
+        static member requirements_ : Lens<VulcanComponent<'c,'s>,VulcanComponentRequirements> =
             (fun x -> x.Requirements), (fun r x -> { x with Requirements = r })
 
-        static member operations_ : Lens<VulcanModule<'c,'s>,Specification.VulcanSpecificationOperation<'c,'s> list> =
+        static member operations_ : Lens<VulcanComponent<'c,'s>,Specification.VulcanSpecificationOperation<'c,'s> list> =
             (fun x -> x.Operations), (fun o x -> { x with Operations = o })
 
-        static member private Comparable (x: VulcanModule<'c,'s>) =
+        static member private Comparable (x: VulcanComponent<'c,'s>) =
             x.Metadata.Name.ToLowerInvariant ()
 
         override x.Equals y =
-            equalsOn VulcanModule<_,_>.Comparable x y
+            equalsOn VulcanComponent<_,_>.Comparable x y
 
         override x.GetHashCode () =
-            hashOn VulcanModule<_,_>.Comparable x
+            hashOn VulcanComponent<_,_>.Comparable x
 
         interface IComparable with
 
             member x.CompareTo y =
-                compareOn VulcanModule<_,_>.Comparable x y
+                compareOn VulcanComponent<_,_>.Comparable x y
 
-     and VulcanModuleMetadata =
+     and VulcanComponentMetadata =
         { Name: string
           Description: string option }
 
         static member name_ =
             (fun x -> x.Name), (fun n x -> { x with Name = n })
 
-     and VulcanModuleRequirements =
+     and VulcanComponentRequirements =
         { Required: Set<string>
           Preconditions: string list }
 
@@ -288,13 +279,13 @@ module Modules =
         let private nodes<'c,'s> =
                 List.map (fun m ->
                     Optic.get (
-                            VulcanModule<'c,'s>.metadata_ 
-                        >-> VulcanModuleMetadata.name_) m, m)
+                            VulcanComponent<'c,'s>.metadata_ 
+                        >-> VulcanComponentMetadata.name_) m, m)
 
         let private edges<'c,'s> =
                 List.map (fun m ->
-                    Optic.get (VulcanModule<'c,'s>.metadata_ >-> VulcanModuleMetadata.name_) m,
-                    Optic.get (VulcanModule<'c,'s>.requirements_ >-> VulcanModuleRequirements.required_) m)
+                    Optic.get (VulcanComponent<'c,'s>.metadata_ >-> VulcanComponentMetadata.name_) m,
+                    Optic.get (VulcanComponent<'c,'s>.requirements_ >-> VulcanComponentRequirements.required_) m)
              >> List.map (fun (n, rs) ->
                     List.map (fun n' -> n', n, ()) (Set.toList rs))
              >> List.concat
@@ -347,65 +338,69 @@ module Modules =
             function | Specification.Prepend (f) -> prepend<'c,'s> f specification
                      | Specification.Splice (n, v, f) -> splice<'c,'s> n v f specification
 
-    (* Composition
+    (* Modularize
 
-       Functions for combining a set of Vulcan Modules to produce a Vulcan
-       Module Composition, detailing the ordered metadata of the Modules used
-       to create the composition, and the resulting Vulcan Specification. *)
+       Functions for combining a set of Vulcan Components to produce a Vulcan
+       Module Composition, detailing the ordered metadata of the Components
+       used to create the module, and the resulting Vulcan Specification. *)
 
     [<RequireQualifiedAccess>]
-    module internal Composition =
+    module internal Modularize =
 
-        let private modules<'c,'s> =
+        let private components<'c,'s> =
                 List.map (fun m ->
-                    Optic.get VulcanModule<'c,'s>.metadata_ m)
+                    Optic.get VulcanComponent<'c,'s>.metadata_ m)
 
         let private specification<'c,'s> =
                 List.map (fun m ->
-                    Optic.get VulcanModule<'c,'s>.operations_ m)
+                    Optic.get VulcanComponent<'c,'s>.operations_ m)
              >> List.concat
              >> List.fold Operation.apply Specification.Terminal.empty
 
         let apply<'c,'s> m =
-            { Modules = modules m
+            { Components = components m
               Specification = specification<'c,'s> m }
 
     (* Module
 
        The Vulcan user API for working with Modules, specifically the
-       composition of Vulcan Modules to Vulcan Module Compositions. This
-       function may fail for various logical reasons and so the return
-       type is represented as a Vulcan Result. *)
+       composition of Vulcan Components to Vulcan Modules. This function may
+       fail for various logical reasons and so the return type is represented
+       as a Vulcan Result. *)
 
     [<RequireQualifiedAccess>]
     module Module =
 
-        let compose modules =
-            match Order.apply modules with
-            | Success modules -> Success (Composition.apply modules)
+        let create components =
+            match Order.apply components with
+            | Success components -> Success (Modularize.apply components)
             | Failure f -> Failure f
 
-(* Graphs
-
-   The Vulcan Graph implementation, turning the logical Vulcan Specification
-   representation of a decision graph in to an optimized executable form (given
-   appropriate configuration data to configure a graph before optimization).
-
-   The resultant graph effectively behaves as an Async State monad while being
-   transparent and modifiable - potentially supporting differing forms of
-   optimization, error handling etc. via mapping of the graph (including a
-   possible plugin model which would act as a "plugin-based graph compiler").
-
-   The graph implementation is not a Vulcan user-facing API, and is wrapped
-   within the Vulcan Machine API. *)
+(* Machines *)
 
 [<AutoOpen>]
-module internal Graphs =
+module Machines =
 
-    (* Common *)
+    (* Graphs
+
+       The Vulcan Graph implementation, turning the logical Vulcan
+       Specification representation of a decision graph in to an optimized
+       executable form (given appropriate configuration data to configure a
+       graph before optimization).
+
+       The resultant graph effectively behaves as an Async State monad while
+       being transparent and modifiable - potentially supporting differing
+       forms of optimization, error handling etc. via mapping of the graph
+       (including a possible plugin model which would act as a "plugin-based
+       graph compiler").
+
+       The graph implementation is not a Vulcan user-facing API, and is wrapped
+       within the Vulcan Machine API. *)
 
     [<RequireQualifiedAccess>]
-    module Common =
+    module Graphs =
+
+        (* Common *)
 
         let RootName =
             [ "root" ]
@@ -418,109 +413,193 @@ module internal Graphs =
             | Undefined
             | Value of VulcanDecisionValue
 
-    (* Translation *)
+        (* Translation *)
 
-    [<RequireQualifiedAccess>]
-    module Translation =
+        [<RequireQualifiedAccess>]
+        module Translation =
 
-        (* Types
+            module S = Specifications
 
-           A translated graph, parameterized by state type, and by the type of
-           the configuration data which will be passed to translation decisions
-           to effectively reify to a Vulcan Decision.
+            (* Types
 
-           Translated graphs are the result of the translation from the Vulcan
-           Specification model to a phase of the pipeline to produce an
-           executable graph model. *)
+               A translated graph, parameterized by state type, and by the type
+               of the configuration data which will be passed to translation
+               decisions to effectively reify to a Vulcan Decision.
 
-        type TranslatedGraph<'c,'s> =
-            | Graph of TranslatedGraphType<'c,'s>
+               Translated graphs are the result of the translation from the
+               Vulcan Specification model to a phase of the pipeline to produce
+               an executable graph model. *)
 
-            static member graph_ : Isomorphism<TranslatedGraph<'c,'s>,TranslatedGraphType<'c,'s>> =
-                (fun (Graph x) -> x), (Graph)
 
-         and TranslatedGraphType<'c,'s> =
-            Graph<string list,TranslatedNode<'c,'s>,Common.Edge>
+            type TranslatedGraph<'c,'s> =
+                | Graph of TranslatedGraphType<'c,'s>
 
-         and TranslatedNode<'c,'s> =
-            | Node of Common.Node<'s>
-            | Configure of VulcanDecisionConfigurator<'c,'s>
+                static member graph_ : Isomorphism<TranslatedGraph<'c,'s>,TranslatedGraphType<'c,'s>> =
+                    (fun (Graph x) -> x), (Graph)
 
-        (* Translation
+             and TranslatedGraphType<'c,'s> =
+                Graph<string list,TranslatedNode<'c,'s>,Edge>
 
-           Functions for translating a Vulcan Specification to a graph based
-           representation of the equivalent (unmodified) decision graph, prior
-           to applying instance specific configuration to the graph. *)
+             and TranslatedNode<'c,'s> =
+                | Node of Node<'s>
+                | TranslatedDecision of VulcanDecisionConfigurator<'c,'s>
 
-        let private left =
-            Common.Value Left
+            (* Translation
 
-        let private right =
-            Common.Value Right
+               Functions for translating a Vulcan Specification to a graph based
+               representation of the equivalent (unmodified) decision graph, prior
+               to applying instance specific configuration to the graph. *)
 
-        let private sn =
-            Specification.(|SpecificationName|)
+            let private left n s =
+                n, (|SpecificationName|) s, Value Left
 
-        let rec private nodes ns =
-            function | Decision (n, c, (l, r)) -> (n, Configure c) :: nodes [] l @ nodes [] r @ ns
-                     | Terminal (n, f) -> (n, Node (Common.Terminal f)) :: ns
+            let private right n s =
+                n, (|SpecificationName|) s, Value Right
 
-        let rec private edges es =
-            function | Decision (n, _, (l, r)) -> (n, sn l, left) :: (n, sn r, right) :: edges [] l @ edges [] r @ es
-                     | Terminal _ -> es
+            let rec private nodes ns =
+                function | S.Decision (n, c, (l, r)) -> (n, TranslatedDecision c) :: nodes [] l @ nodes [] r @ ns
+                         | S.Terminal (n, f) -> (n, Node (Terminal f)) :: ns
 
-        let translate s =
-            Graph (
-                Graph.create
-                    ((Common.RootName, Node Common.Root) :: nodes [] s)
-                    ((Common.RootName, sn s, Common.Undefined) :: edges [] s))
+            let rec private edges es =
+                function | S.Decision (n, _, (l, r)) -> (left n l) :: (right n r) :: edges [] l @ edges [] r @ es
+                         | S.Terminal _ -> es
 
-    (* Configuration *)
+            let translate s =
+                Graph (
+                    Graph.create
+                        ((RootName, Node Root) :: nodes [] s)
+                        ((RootName, (|SpecificationName|) s, Undefined) :: edges [] s))
 
-    [<RequireQualifiedAccess>]
-    module Configuration =
+        (* Configuration *)
 
-        (* Types
+        [<RequireQualifiedAccess>]
+        module Configuration =
 
-           A configured graph, parameterized solely by the state type which will
-           be threaded through the computation. *)
+            module T = Translation
 
-        type ConfiguredGraph<'s> =
-            | Graph of ConfiguredGraphType<'s>
+            (* Types
 
-            static member graph_ : Isomorphism<ConfiguredGraph<'s>,ConfiguredGraphType<'s>> =
-                (fun (Graph x) -> x), (Graph)
+               A configured graph, parameterized solely by the state type which
+               will be threaded through the computation. *)
 
-         and ConfiguredGraphType<'s> =
-            Graph<string list,ConfiguredNode<'s>,Common.Edge>
+            type ConfiguredGraph<'s> =
+                | Graph of ConfiguredGraphType<'s>
 
-         and ConfiguredNode<'s> =
-            | Node of Common.Node<'s>
-            | Decision of VulcanDecision<'s>
+                static member graph_ : Isomorphism<ConfiguredGraph<'s>,ConfiguredGraphType<'s>> =
+                    (fun (Graph x) -> x), (Graph)
 
-            static member node_ : Epimorphism<ConfiguredNode<'s>,Common.Node<'s>> =
-                (function | Node n -> Some n
-                          | _ -> None), (Node)
+             and ConfiguredGraphType<'s> =
+                Graph<string list,ConfiguredNode<'s>,Edge>
 
-            static member decision_ : Epimorphism<ConfiguredNode<'s>,VulcanDecision<'s>> =
-                (function | Decision d -> Some d
-                          | _ -> None), (Decision)
+             and ConfiguredNode<'s> =
+                | Node of Node<'s>
+                | ConfiguredDecision of VulcanDecision<'s>
 
-        (* Configuration
+                static member node_ : Epimorphism<ConfiguredNode<'s>,Node<'s>> =
+                    (function | Node n -> Some n
+                              | _ -> None), (Node)
 
-           Functions for applying configuration data to an unconfigured graph,
-           giving a configured graph. *)
+                static member decision_ : Epimorphism<ConfiguredNode<'s>,VulcanDecision<'s>> =
+                    (function | ConfiguredDecision d -> Some d
+                              | _ -> None), (ConfiguredDecision)
 
-        let configure<'c,'s> configuration =
-                Optic.get (Lens.ofIsomorphism Translation.TranslatedGraph<'c,'s>.graph_)
-             >> Graph.Nodes.map (fun _ ->
-                    function | Translation.Node n -> Node n
-                             | Translation.Configure f -> Decision (f configuration))
-             >> Graph
+            (* Node Mapping *)
 
-(* Machines *)
+            let private map<'c,'s> configuration : T.TranslatedGraphType<'c,'s> -> ConfiguredGraphType<'s> =
+                Graph.Nodes.map (fun _ ->
+                    function | T.Node n -> Node n
+                             | T.TranslatedDecision f -> ConfiguredDecision (f configuration))
 
-[<AutoOpen>]
-module Machines =
+            (* Configure *)
 
-    type X = unit
+            let configure<'c,'s> configuration =
+                    Optic.get (Lens.ofIsomorphism T.TranslatedGraph<'c,'s>.graph_)
+                 >> map<'c,'s> configuration
+                 >> Graph
+
+        (* Optimization *)
+
+        [<RequireQualifiedAccess>]
+        module Optimization =
+
+            module C = Configuration
+
+            (* Types
+
+               An optimized graph, having optimized away all Vulcan Decisions
+               which result in literals, removing the choice point and directly
+               connecting the input edges to the appropriate next node given
+               the literal value. *)
+
+            type OptimizedGraph<'s> =
+                | Graph of OptimizedGraphType<'s>
+
+                static member graph_ : Isomorphism<OptimizedGraph<'s>,OptimizedGraphType<'s>> =
+                    (fun (Graph x) -> x), (Graph)
+
+             and OptimizedGraphType<'s> =
+                Graph<string list, OptimizedNode<'s>,Edge>
+
+             and OptimizedNode<'s> =
+                | Node of Node<'s>
+                | OptimizedDecision of Vulcan<VulcanDecisionValue,'s>
+
+            (* Literal Node Elimination *)
+
+            let private literal<'s> : C.ConfiguredGraphType<'s> -> (string list * VulcanDecisionValue) option =
+                    Graph.Nodes.toList
+                 >> List.tryPick (function | n, C.ConfiguredDecision (Literal v) -> Some (n, v)
+                                           | _ -> None)
+
+            let private target<'s> n v : C.ConfiguredGraphType<'s> -> string list =
+                    Graph.Nodes.outward n
+                 >> Option.get
+                 >> List.pick (function | _, t, Value v' when v = v' -> Some t
+                                        | _ -> None)
+
+            let private edges<'s> n t : C.ConfiguredGraphType<'s> -> LEdge<string list,Edge> list =
+                    Graph.Nodes.inward n
+                 >> Option.get
+                 >> List.map (fun (f, _, v) -> (f, t, v))
+
+            let rec private eliminateLiterals<'s> (graph: C.ConfiguredGraphType<'s>) =
+                match literal graph with
+                | Some (n, v) ->
+                    eliminateLiterals<'s> (
+                        graph
+                        |> Graph.Nodes.remove n
+                        |> Graph.Edges.addMany (edges<'s> n (target<'s> n v graph) graph))
+                | _ ->
+                    graph
+
+            (* Subgraph Elimination *)
+
+            let private subgraph<'s> (graph: C.ConfiguredGraphType<'s>) =
+                 Graph.Nodes.toList graph
+                 |> List.tryPick (function | _, C.Node Root -> None
+                                           | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
+                                           | _ -> None)
+
+            let rec private eliminateSubgraphs<'s> (graph: C.ConfiguredGraphType<'s>) =
+                match subgraph graph with
+                | Some n -> eliminateSubgraphs<'s> (Graph.Nodes.remove n graph)
+                | _ -> graph
+
+            (* Node Mapping *)
+
+            let private map<'s> : C.ConfiguredGraphType<'s> -> OptimizedGraphType<'s> =
+                Graph.Nodes.map (fun _ ->
+                    function | C.Node n -> Node n
+                             | C.ConfiguredDecision (Function f) -> OptimizedDecision f
+                             | _ -> failwith "Unexpected Node during Optimization.")
+
+            (* Optimization *)
+
+            let optimize<'s> =
+                   Optic.get (Lens.ofIsomorphism C.ConfiguredGraph<'s>.graph_)
+                >> eliminateLiterals<'s>
+                >> eliminateSubgraphs<'s>
+                >> map<'s>
+                >> Graph
+
+    (* Types *)
