@@ -1,4 +1,4 @@
-﻿module Vulcan
+﻿module Hephaestus
 
 open System
 open Aether
@@ -10,7 +10,7 @@ open Hekate
 
 (* Notes
 
-   Type parameter names throughout the Vulcan implementation are used
+   Type parameter names throughout the Hephaestus implementation are used
    consistently, single character parameter names representing two specific
    concepts:
    - 'c for the type of Configuration
@@ -48,9 +48,9 @@ module internal Prelude =
 
 (* Types
 
-   Core Vulcan types of various classifications, representing the common
-   building blocks of Vulcan machinery which will regularly be exposed to users
-   of the Vulcan system (i.e. those designing and implementing Vulcan
+   Core Hephaestus types of various classifications, representing the common
+   building blocks of Hephaestus machinery which will regularly be exposed to users
+   of the Hephaestus system (i.e. those designing and implementing Hephaestus
    components. *)
 
 (* Decisions *)
@@ -76,7 +76,7 @@ type DecisionConfigurator<'c,'s> =
 
 (* Specifications
 
-   The Vulcan Specification model, a highly restricted abstraction of the
+   The Hephaestus Specification model, a highly restricted abstraction of the
    conceptual decision graph, allowing only binary (Left|Right) Decisions or
    Terminals to exist as a Specification of a graph (where the left and right
    case of a Decision is - recursively - a Specification).
@@ -124,7 +124,7 @@ module Specifications =
 
     (* Specification
 
-       The Vulcan user API for working with specifications, including specific
+       The Hephaestus user API for working with specifications, including specific
        functionality for working at the Decision and Terminal level, and for
        working with modifications and compositions at the specification level,
        enabling the combination of multiple specifications, given dependencies,
@@ -136,18 +136,18 @@ module Specifications =
         (* Terminals
 
            Helpful shorthand functions for working with terminals, namely a
-           function for creating a new named terminal given a Vulcan function
+           function for creating a new named terminal given a Hephaestus function
            of unit. *)
 
         [<RequireQualifiedAccess>]
         module Terminal =
 
-            /// Create a new named terminal, given a Vulcan function returning
+            /// Create a new named terminal, given a Hephaestus function returning
             /// unit, and with the appropriate state type.
             let create<'c,'r,'s> name f =
                 Specification<'c,'r,'s>.Terminal (name, f)
 
-            /// Create a new unnamed terminal with a no-op Vulcan function.
+            /// Create a new unnamed terminal with a no-op Hephaestus function.
             let empty<'c,'r,'s> =
                 Specification<'c,'r,'s>.Terminal ([], fun s -> async.Return (Unchecked.defaultof<'r>, s))
 
@@ -186,7 +186,7 @@ module Specifications =
 
 (* Models
 
-   The Vulcan Model implementation, providing a way to package and share a
+   The Hephaestus Model implementation, providing a way to package and share a
    Specification via operations on the existing state of a notional
    specification, along with metadata relating to that specification, such
    as name, description, etc. plus technical metadata such as dependencies
@@ -199,11 +199,11 @@ module Models =
 
     (* Types
 
-       Types defining an individual Vulcan Component (pre-composition) and a
-       Vulcan Model, the combined result of a set of orderable Vulcan
+       Types defining an individual Hephaestus Component (pre-composition) and a
+       Hephaestus Model, the combined result of a set of orderable Hephaestus
        Components, and including metadata from each in a meaningful way.
 
-       The list of constituent Vulcan Components represents the applied
+       The list of constituent Hephaestus Components represents the applied
        ordering. *)
 
     type Model<'c,'r,'s> =
@@ -254,8 +254,8 @@ module Models =
 
     (* Order
 
-       Functions to order a set of Vulcan Components given the defined
-       dependencies as supplied in the Vulcan Component Requirements. An
+       Functions to order a set of Hephaestus Components given the defined
+       dependencies as supplied in the Hephaestus Component Requirements. An
        ordering may or may not be possible, and the function will throw on
        failure.
 
@@ -292,7 +292,7 @@ module Models =
             match independent graph with
             | Some (m, graph) -> order (modules @ [ m ]) graph
             | _ when Graph.isEmpty graph -> modules
-            | _ -> failwith "A valid Vulcan Model order cannot be determined."
+            | _ -> failwith "A valid Hephaestus Model order cannot be determined."
 
         let apply<'c,'r,'s> =
                 Set.toList
@@ -301,7 +301,7 @@ module Models =
 
     (* Operation
 
-       Functions to process the logical operations defined on Vulcan
+       Functions to process the logical operations defined on Hephaestus
        Specifications, combining two specifications in specific and controlled
        ways. *)
 
@@ -327,8 +327,8 @@ module Models =
 
     (* Model
 
-       The Vulcan user API for working with Models, specifically the
-       composition of Vulcan Components to Vulcan Models. This function may
+       The Hephaestus user API for working with Models, specifically the
+       composition of Hephaestus Components to Hephaestus Models. This function may
        fail. *)
 
     [<RequireQualifiedAccess>]
@@ -357,7 +357,7 @@ module Machines =
 
     (* Graphs
 
-       The Vulcan Graph implementation, turning the logical Vulcan
+       The Hephaestus Graph implementation, turning the logical Hephaestus
        Specification representation of a decision graph in to an optimized
        executable form (given appropriate configuration data to configure a
        graph before optimization).
@@ -368,8 +368,8 @@ module Machines =
        (including a possible plugin model which would act as a "plugin-based
        graph compiler").
 
-       The graph implementation is not a Vulcan user-facing API, and is wrapped
-       within the Vulcan Machine API. *)
+       The graph implementation is not a Hephaestus user-facing API, and is wrapped
+       within the Hephaestus Machine API. *)
 
     [<AutoOpen>]
     module internal Graphs =
@@ -398,10 +398,10 @@ module Machines =
 
                A translated graph, parameterized by state type, and by the type
                of the configuration data which will be passed to translation
-               decisions to effectively reify to a Vulcan Decision.
+               decisions to effectively reify to a Hephaestus Decision.
 
                Translated graphs are the result of the translation from the
-               Vulcan Specification model to a phase of the pipeline to produce
+               Hephaestus Specification model to a phase of the pipeline to produce
                an executable graph model. *)
 
 
@@ -420,7 +420,7 @@ module Machines =
 
             (* Translation
 
-               Functions for translating a Vulcan Specification to a graph based
+               Functions for translating a Hephaestus Specification to a graph based
                representation of the equivalent (unmodified) decision graph, prior
                to applying instance specific configuration to the graph. *)
 
@@ -500,7 +500,7 @@ module Machines =
 
             (* Types
 
-               An optimized graph, having optimized away all Vulcan Decisions
+               An optimized graph, having optimized away all Hephaestus Decisions
                which result in literals, removing the choice point and directly
                connecting the input edges to the appropriate next node given
                the literal value. *)

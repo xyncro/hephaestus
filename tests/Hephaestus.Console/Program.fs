@@ -1,6 +1,6 @@
-﻿module Vulcan.Console
+﻿module Hephaestus.Console
 
-open Vulcan
+open Hephaestus
 
 (* Classifications *)
 
