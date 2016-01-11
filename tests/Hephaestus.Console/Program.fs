@@ -90,7 +90,7 @@ module HttpOptions =
         Specification.Decision.create [ Name; Decision; name ]
 
     let private methodOptions =
-        decision "method.options" (fun (_: HttpConfiguration) ->
+        decision "method.options" (fun _ ->
             Function (fun state ->
                 async {
                     return match state.Method with
