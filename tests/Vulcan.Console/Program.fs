@@ -124,24 +124,26 @@ module HttpOptions =
 [<EntryPoint>]
 let main _ =
 
+    // Data
+
     let configuration = { ServiceAvailable = None }
     let state = { Method = "get" }
 
-    let components = set [ HttpOptions.exports; HttpCore.exports ]
-    let create = Module.create components
-    let httpModule = create |> function | Success composition -> composition
-                                        | Failure f -> failwith f
+    // Model
 
-    printfn "http:\n%A\n" httpModule
+    let model =  Model.create (set [ HttpOptions.exports; HttpCore.exports ])
 
-    let translated = Machines.Graphs.Translation.translate httpModule.Specification
-    let configured = Machines.Graphs.Configuration.configure configuration translated
-    let optimized = Machines.Graphs.Optimization.optimize configured
+    // Machine
 
-    printfn "translated:\n%A\n" translated
-    printfn "configured:\n%A\n" configured
-    printfn "optimized:\n%A\n" optimized
+    let prototype = Machine.prototype model
+    let machine = Machine.configure prototype configuration
+
+    // HTTP
+
+    let http = Machine.run machine
+    let _, results = Async.RunSynchronously (http state)
+
+    // Wait
 
     let _ = System.Console.ReadLine ()
-
     0

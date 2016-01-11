@@ -73,12 +73,6 @@ type VulcanDecision<'s> =
 type VulcanDecisionConfigurator<'c,'s> =
     'c -> VulcanDecision<'s>
 
-(* Results *)
-
-type VulcanResult<'a> =
-    | Success of 'a
-    | Failure of string
-
 (* Specifications
 
    The Vulcan Specification model, a highly restricted abstraction of the
@@ -197,27 +191,27 @@ module Specifications =
          and VulcanSpecificationMap<'c,'s> =
             VulcanSpecification<'c,'s> -> VulcanSpecification<'c,'s>
 
-(* Modules
+(* Models
 
-   The Vulcan Module implementation, providing a way to package and share a
+   The Vulcan Model implementation, providing a way to package and share a
    Specification via operations on the existing state of a notional
    specification, along with metadata relating to that specification, such
    as name, description, etc. plus technical metadata such as dependencies
-   and precedence according to the module composition model. *)
+   and precedence according to the composition model. *)
 
 [<AutoOpen>]
-module Modules =
+module Models =
 
     (* Types
 
-       Types defining an individual Vulcan Module (pre-composition) and a
-       Vulcan Module Composition, the combined result of a set of orderable
-       Vulcan Modules, and including metadata from each in a meaningful way.
+       Types defining an individual Vulcan Component (pre-composition) and a
+       Vulcan Model, the combined result of a set of orderable Vulcan
+       Components, and including metadata from each in a meaningful way.
 
-       The list of constituent Vulcan Modules represents the applied
+       The list of constituent Vulcan Components represents the applied
        ordering. *)
 
-    type VulcanModule<'c,'s> =
+    type VulcanModel<'c,'s> =
         { Components: VulcanComponentMetadata list
           Specification: Specifications.VulcanSpecification<'c,'s> }
 
@@ -265,9 +259,10 @@ module Modules =
 
     (* Order
 
-       Functions to order a set of Vulcan Modules given the defined dependencies
-       as supplied in the Vulcan Module Requirements. An ordering may or may not
-       be possible, as represented by the use of the Vulcan Result type.
+       Functions to order a set of Vulcan Components given the defined
+       dependencies as supplied in the Vulcan Component Requirements. An
+       ordering may or may not be possible, and the function will throw on
+       failure.
 
        The implementation is a simple topological sort using Kahn's algorithm,
        made simpler by the fact that Hekate will automatically handle the
@@ -301,8 +296,8 @@ module Modules =
         let rec private order modules graph =
             match independent graph with
             | Some (m, graph) -> order (modules @ [ m ]) graph
-            | _ when Graph.isEmpty graph -> Success modules
-            | _ -> Failure "A valid Vulcan Module order cannot be determined."
+            | _ when Graph.isEmpty graph -> modules
+            | _ -> failwith "A valid Vulcan Model order cannot be determined."
 
         let apply<'c,'s> =
                 Set.toList
@@ -338,14 +333,14 @@ module Modules =
             function | Specification.Prepend (f) -> prepend<'c,'s> f specification
                      | Specification.Splice (n, v, f) -> splice<'c,'s> n v f specification
 
-    (* Modularize
+    (* Modelize
 
        Functions for combining a set of Vulcan Components to produce a Vulcan
-       Module Composition, detailing the ordered metadata of the Components
-       used to create the module, and the resulting Vulcan Specification. *)
+       Model, detailing the ordered metadata of the Components used to create
+       the model, and the resulting Vulcan Specification. *)
 
     [<RequireQualifiedAccess>]
-    module internal Modularize =
+    module internal Modelize =
 
         let private components<'c,'s> =
                 List.map (fun m ->
@@ -361,20 +356,18 @@ module Modules =
             { Components = components m
               Specification = specification<'c,'s> m }
 
-    (* Module
+    (* Model
 
-       The Vulcan user API for working with Modules, specifically the
-       composition of Vulcan Components to Vulcan Modules. This function may
-       fail for various logical reasons and so the return type is represented
-       as a Vulcan Result. *)
+       The Vulcan user API for working with Models, specifically the
+       composition of Vulcan Components to Vulcan Models. This function may
+       fail. *)
 
     [<RequireQualifiedAccess>]
-    module Module =
+    module Model =
 
-        let create components =
-            match Order.apply components with
-            | Success components -> Success (Modularize.apply components)
-            | Failure f -> Failure f
+        let create<'c,'s> =
+                Order.apply<'c,'s>
+             >> Modelize.apply
 
 (* Machines *)
 
@@ -398,7 +391,7 @@ module Machines =
        within the Vulcan Machine API. *)
 
     [<RequireQualifiedAccess>]
-    module Graphs =
+    module internal Graphs =
 
         (* Common *)
 
@@ -603,3 +596,39 @@ module Machines =
                 >> Graph
 
     (* Types *)
+
+    type VulcanMachine<'s> =
+        | Machine of Vulcan<unit,'s>
+
+     and VulcanMachinePrototype<'c,'s> =
+        | MachinePrototype of ('c -> VulcanMachine<'s>)
+
+    (* Machine *)
+
+    [<RequireQualifiedAccess>]
+    module Machine =
+
+        (* Creation *)
+
+        [<RequireQualifiedAccess>]
+        module private Create =
+
+            let machine<'s> (graph: Graphs.Optimization.OptimizedGraph<'s>) =
+                Machine (fun (state: 's) ->
+                    async {
+                        return (), state })
+
+            let machinePrototype<'c,'s> (graph: Graphs.Translation.TranslatedGraph<'c,'s>) =
+                MachinePrototype (fun (configuration: 'c) ->
+                    machine<'s> (Graphs.Optimization.optimize (Graphs.Configuration.configure configuration graph)))
+
+        (* Functions *)
+
+        let prototype<'c,'s> (m: VulcanModel<'c,'s>) =
+            Create.machinePrototype<'c,'s> (Graphs.Translation.translate m.Specification)
+
+        let configure<'c,'s> (MachinePrototype (f : ('c -> VulcanMachine<'s>))) configuration =
+            f configuration
+
+        let run<'s> (Machine (f : Vulcan<unit,'s>)) state =
+            f state
