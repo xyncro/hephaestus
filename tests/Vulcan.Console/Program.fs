@@ -62,7 +62,7 @@ module HttpCore =
     (* Composition *)
 
     let httpCore =
-        serviceAvailable (response "service.unavailable") (response "ok")
+        serviceAvailable (response "service.unavailable", response "ok")
 
     (* Component *)
 
@@ -74,7 +74,7 @@ module HttpCore =
             { Required = set []
               Preconditions = [] }
           Operations =
-            [ Specification.Prepend (fun _ -> httpCore) ] }
+            [ Prepend (fun _ -> httpCore) ] }
 
 (* Options *)
 
@@ -105,7 +105,7 @@ module HttpOptions =
     (* Composition *)
 
     let httpOptions =
-        fun x -> methodOptions x (response "options")
+        fun x -> methodOptions (x, response "options")
 
     (* Component *)
 
@@ -117,7 +117,7 @@ module HttpOptions =
             { Required = set [ HttpCore.Name ]
               Preconditions = [] }
           Operations =
-            [ Specification.Splice ([ HttpCore.Name; Decision; "service.available" ], Right, httpOptions) ] }
+            [ Splice ([ HttpCore.Name; Decision; "service.available" ], Right, httpOptions) ] }
 
 (* Main *)
 
