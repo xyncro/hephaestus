@@ -5,8 +5,8 @@ open Aether
 open Aether.Operators
 open Hekate
 
+// TODO: Paramaterize for Terminal return type
 // TODO: Pre/post-condition analysis
-// TODO: Machine wrapper
 // TODO: Logging/Introspection mechanisms
 
 (* Notes
@@ -468,7 +468,7 @@ module Machines =
         [<RequireQualifiedAccess>]
         module Configuration =
 
-            //module T = Translation
+            module T = Translation
 
             (* Types
 
@@ -498,15 +498,15 @@ module Machines =
 
             (* Node Mapping *)
 
-            let private map<'c,'s> configuration : Translation.TranslatedGraphType<'c,'s> -> ConfiguredGraphType<'s> =
+            let private map<'c,'s> configuration : T.TranslatedGraphType<'c,'s> -> ConfiguredGraphType<'s> =
                 Graph.Nodes.map (fun _ ->
-                    function | Translation.Node n -> Node n
-                             | Translation.TranslatedDecision f -> ConfiguredDecision (f configuration))
+                    function | T.Node n -> Node n
+                             | T.TranslatedDecision f -> ConfiguredDecision (f configuration))
 
             (* Configure *)
 
             let configure<'c,'s> configuration =
-                    Optic.get (Lens.ofIsomorphism Translation.TranslatedGraph<'c,'s>.graph_)
+                    Optic.get (Lens.ofIsomorphism T.TranslatedGraph<'c,'s>.graph_)
                  >> map<'c,'s> configuration
                  >> Graph
 
@@ -515,7 +515,7 @@ module Machines =
         [<RequireQualifiedAccess>]
         module Optimization =
 
-            //module C = Configuration
+            module C = Configuration
 
             (* Types
 
@@ -539,23 +539,23 @@ module Machines =
 
             (* Literal Node Elimination *)
 
-            let private node<'s> : Configuration.ConfiguredGraphType<'s> -> (string list * VulcanDecisionValue) option =
+            let private node<'s> : C.ConfiguredGraphType<'s> -> (string list * VulcanDecisionValue) option =
                     Graph.Nodes.toList
-                 >> List.tryPick (function | n, Configuration.ConfiguredDecision (Literal v) -> Some (n, v)
+                 >> List.tryPick (function | n, C.ConfiguredDecision (Literal v) -> Some (n, v)
                                            | _ -> None)
 
-            let private target<'s> n v : Configuration.ConfiguredGraphType<'s> -> string list =
+            let private target<'s> n v : C.ConfiguredGraphType<'s> -> string list =
                     Graph.Nodes.outward n
                  >> Option.get
                  >> List.pick (function | _, t, Value v' when v = v' -> Some t
                                         | _ -> None)
 
-            let private edges<'s> n t : Configuration.ConfiguredGraphType<'s> -> LEdge<string list,Edge> list =
+            let private edges<'s> n t : C.ConfiguredGraphType<'s> -> LEdge<string list,Edge> list =
                     Graph.Nodes.inward n
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
 
-            let rec private eliminateLiterals<'s> (graph: Configuration.ConfiguredGraphType<'s>) =
+            let rec private eliminateLiterals<'s> (graph: C.ConfiguredGraphType<'s>) =
                 match node graph with
                 | Some (n, v) ->
                     eliminateLiterals<'s> (
@@ -567,33 +567,59 @@ module Machines =
 
             (* Subgraph Elimination *)
 
-            let private subgraph<'s> (graph: Configuration.ConfiguredGraphType<'s>) =
+            let private subgraph<'s> (graph: C.ConfiguredGraphType<'s>) =
                  Graph.Nodes.toList graph
-                 |> List.tryPick (function | _, Configuration.Node Root -> None
+                 |> List.tryPick (function | _, C.Node Root -> None
                                            | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
                                            | _ -> None)
 
-            let rec private eliminateSubgraphs<'s> (graph: Configuration.ConfiguredGraphType<'s>) =
+            let rec private eliminateSubgraphs<'s> (graph: C.ConfiguredGraphType<'s>) =
                 match subgraph graph with
                 | Some n -> eliminateSubgraphs<'s> (Graph.Nodes.remove n graph)
                 | _ -> graph
 
             (* Node Mapping *)
 
-            let private map<'s> : Configuration.ConfiguredGraphType<'s> -> OptimizedGraphType<'s> =
+            let private map<'s> : C.ConfiguredGraphType<'s> -> OptimizedGraphType<'s> =
                 Graph.Nodes.map (fun _ ->
-                    function | Configuration.Node n -> Node n
-                             | Configuration.ConfiguredDecision (Function f) -> OptimizedDecision f
+                    function | C.Node n -> Node n
+                             | C.ConfiguredDecision (Function f) -> OptimizedDecision f
                              | _ -> failwith "Unexpected Node during Optimization.")
 
             (* Optimization *)
 
             let optimize<'s> =
-                   Optic.get (Lens.ofIsomorphism Configuration.ConfiguredGraph<'s>.graph_)
+                   Optic.get (Lens.ofIsomorphism C.ConfiguredGraph<'s>.graph_)
                 >> eliminateLiterals<'s>
                 >> eliminateSubgraphs<'s>
                 >> map<'s>
                 >> Graph
+
+        (* Evaluation *)
+
+        [<RequireQualifiedAccess>]
+        module Evaluation =
+
+            module O = Optimization
+
+            let private current<'s> n : O.OptimizedGraphType<'s> -> (string list * O.OptimizedNode<'s>) =
+                    Graph.Nodes.find n
+
+            let private next<'s> n e : O.OptimizedGraphType<'s> -> string list =
+                    Graph.Nodes.successors n
+                 >> Option.get
+                 >> List.pick (function | n, e' when e = e' -> Some n
+                                        | _ -> None)
+
+            let rec private eval<'s> n s (g: O.OptimizedGraphType<'s>) =
+                match current<'s> n g with
+                | n, O.OptimizedDecision f -> async.Bind (f s, fun (v, s) -> eval<'s> (next<'s> n (Value v) g) s g)
+                | n, O.Node Root -> eval<'s> (next<'s> n Undefined g) s g
+                | _, O.Node (Terminal f) -> f s
+
+            let evaluate<'s> state (graph: Optimization.OptimizedGraph<'s>) =
+                match graph with
+                | Optimization.Graph graph -> eval<'s> RootName state graph
 
     (* Types *)
 
@@ -608,24 +634,25 @@ module Machines =
     [<RequireQualifiedAccess>]
     module Machine =
 
-        (* Creation *)
+        module C = Configuration
+        module E = Evaluation
+        module O = Optimization
+        module T = Translation
 
-        [<RequireQualifiedAccess>]
-        module private Create =
+        (* Initialization *)
 
-            let machine<'s> (graph: Optimization.OptimizedGraph<'s>) =
-                Machine (fun (state: 's) ->
-                    async {
-                        return (), state })
+        let private machine<'s> (graph: O.OptimizedGraph<'s>) =
+            Machine (fun (state: 's) ->
+                E.evaluate state graph)
 
-            let machinePrototype<'c,'s> (graph: Translation.TranslatedGraph<'c,'s>) =
-                MachinePrototype (fun (configuration: 'c) ->
-                    machine<'s> ((Configuration.configure configuration >> Optimization.optimize) graph))
+        let private machinePrototype<'c,'s> (graph: T.TranslatedGraph<'c,'s>) =
+            MachinePrototype (fun (configuration: 'c) ->
+                machine<'s> ((C.configure configuration >> O.optimize) graph))
 
-        (* Functions *)
+        (* Operations *)
 
         let prototype<'c,'s> (m: VulcanModel<'c,'s>) =
-            Create.machinePrototype<'c,'s> (Translation.translate m.Specification)
+            machinePrototype<'c,'s> (T.translate m.Specification)
 
         let configure<'c,'s> (MachinePrototype (f : ('c -> VulcanMachine<'s>))) configuration =
             f configuration
