@@ -5,7 +5,6 @@ open Aether
 open Aether.Operators
 open Hekate
 
-// TODO: Paramaterize for Terminal return type
 // TODO: Pre/post-condition analysis
 // TODO: Logging/Introspection mechanisms
 
