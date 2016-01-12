@@ -24,7 +24,7 @@ type HttpState =
 (* Terminals *)
 
 let response name =
-    Specification.Terminal.create name (fun s ->
+    Specification.Terminal.create name (fun _ s ->
         async {
             printfn "%A Method: %s" name s.Method
             return (), s })

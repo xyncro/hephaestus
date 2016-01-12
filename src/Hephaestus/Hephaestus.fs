@@ -74,6 +74,9 @@ type Decision<'s> =
 type DecisionConfigurator<'c,'s> =
     'c -> Decision<'s>
 
+type TerminalConfigurator<'c,'r,'s> =
+    'c -> 's -> Async<'r * 's>
+
 (* Specifications
 
    The Hephaestus Specification model, a highly restricted abstraction of the
@@ -96,21 +99,21 @@ module Specifications =
 
     type Specification<'c,'r,'s> =
         | Decision of SpecificationDecision<'c,'r,'s>
-        | Terminal of SpecificationTerminal<'r,'s>
+        | Terminal of SpecificationTerminal<'c,'r,'s>
 
         static member decision_ : Epimorphism<Specification<'c,'r,'s>,SpecificationDecision<'c,'r,'s>> =
             (function | Decision d -> Some d
                       | _ -> None), (Decision)
 
-        static member terminal_ : Epimorphism<Specification<'c,'r,'s>,SpecificationTerminal<'r,'s>> =
+        static member terminal_ : Epimorphism<Specification<'c,'r,'s>,SpecificationTerminal<'c,'r,'s>> =
             (function | Terminal t -> Some t
                       | _ -> None), (Terminal)
 
      and SpecificationDecision<'c,'r,'s> =
         string list * DecisionConfigurator<'c,'s> * Pair<Specification<'c,'r,'s>>
 
-     and SpecificationTerminal<'r,'s> =
-        string list * ('s -> Async<'r * 's>)
+     and SpecificationTerminal<'c,'r,'s> =
+        string list * TerminalConfigurator<'c,'r,'s>
 
     type SpecificationOperation<'c,'r,'s> =
         | Prepend of Identity<Specification<'c,'r,'s>>
@@ -144,12 +147,12 @@ module Specifications =
 
             /// Create a new named terminal, given a Hephaestus function returning
             /// unit, and with the appropriate state type.
-            let create<'c,'r,'s> name f =
-                Specification<'c,'r,'s>.Terminal (name, f)
+            let create<'c,'r,'s> name configure =
+                Specification<'c,'r,'s>.Terminal (name, configure)
 
             /// Create a new unnamed terminal with a no-op Hephaestus function.
             let empty<'c,'r,'s> =
-                Specification<'c,'r,'s>.Terminal ([], fun s -> async.Return (Unchecked.defaultof<'r>, s))
+                Specification<'c,'r,'s>.Terminal ([], fun _ s -> async.Return (Unchecked.defaultof<'r>, s))
 
         (* Decisions
 
@@ -379,9 +382,8 @@ module Machines =
         let RootName =
             [ "root" ]
 
-        type Node<'r,'s> =
+        type Node =
             | Root
-            | Terminal of ('s -> Async<'r * 's>)
 
          and Edge =
             | Undefined
@@ -404,7 +406,6 @@ module Machines =
                Hephaestus Specification model to a phase of the pipeline to produce
                an executable graph model. *)
 
-
             type TranslatedGraph<'c,'r,'s> =
                 | Graph of TranslatedGraphType<'c,'r,'s>
 
@@ -415,8 +416,9 @@ module Machines =
                 Graph<string list,TranslatedNode<'c,'r,'s>,Edge>
 
              and TranslatedNode<'c,'r,'s> =
-                | Node of Node<'r,'s>
+                | Node of Node
                 | TranslatedDecision of DecisionConfigurator<'c,'s>
+                | TranslatedTerminal of TerminalConfigurator<'c,'r,'s>
 
             (* Translation
 
@@ -432,7 +434,7 @@ module Machines =
 
             let rec private nodes ns =
                 function | S.Decision (n, c, (l, r)) -> (n, TranslatedDecision c) :: nodes [] l @ nodes [] r @ ns
-                         | S.Terminal (n, f) -> (n, Node (Terminal f)) :: ns
+                         | S.Terminal (n, c) -> (n, TranslatedTerminal c) :: ns
 
             let rec private edges es =
                 function | S.Decision (n, _, (l, r)) -> (left n l) :: (right n r) :: edges [] l @ edges [] r @ es
@@ -466,10 +468,11 @@ module Machines =
                 Graph<string list,ConfiguredNode<'r,'s>,Edge>
 
              and ConfiguredNode<'r,'s> =
-                | Node of Node<'r,'s>
+                | Node of Node
                 | ConfiguredDecision of Decision<'s>
+                | ConfiguredTerminal of ('s -> Async<'r * 's>)
 
-                static member node_ : Epimorphism<ConfiguredNode<'r,'s>,Node<'r,'s>> =
+                static member node_ : Epimorphism<ConfiguredNode<'r,'s>,Node> =
                     (function | Node n -> Some n
                               | _ -> None), (Node)
 
@@ -482,7 +485,8 @@ module Machines =
             let private map<'c,'r,'s> configuration : T.TranslatedGraphType<'c,'r,'s> -> ConfiguredGraphType<'r,'s> =
                 Graph.Nodes.map (fun _ ->
                     function | T.Node n -> Node n
-                             | T.TranslatedDecision f -> ConfiguredDecision (f configuration))
+                             | T.TranslatedDecision f -> ConfiguredDecision (f configuration)
+                             | T.TranslatedTerminal f -> ConfiguredTerminal (f configuration))
 
             (* Configure *)
 
@@ -515,8 +519,9 @@ module Machines =
                 Graph<string list, OptimizedNode<'r,'s>,Edge>
 
              and OptimizedNode<'r,'s> =
-                | Node of Node<'r,'s>
+                | Node of Node
                 | OptimizedDecision of ('s -> Async<DecisionValue * 's>)
+                | OptimizedTerminal of ('s -> Async<'r * 's>)
 
             (* Literal Node Elimination *)
 
@@ -565,6 +570,7 @@ module Machines =
                 Graph.Nodes.map (fun _ ->
                     function | C.Node n -> Node n
                              | C.ConfiguredDecision (Function f) -> OptimizedDecision f
+                             | C.ConfiguredTerminal (f) -> OptimizedTerminal f
                              | _ -> failwith "Unexpected Node during Optimization.")
 
             (* Optimization *)
@@ -594,9 +600,9 @@ module Machines =
 
             let rec private eval<'r,'s> n s (g: O.OptimizedGraphType<'r,'s>) =
                 match current n g with
-                | n, O.OptimizedDecision f -> async.Bind (f s, fun (v, s) -> eval (next n (Value v) g) s g)
                 | n, O.Node Root -> eval (next n Undefined g) s g
-                | _, O.Node (Terminal f) -> f s
+                | n, O.OptimizedDecision f -> async.Bind (f s, fun (v, s) -> eval (next n (Value v) g) s g)
+                | _, O.OptimizedTerminal f -> f s
 
             let evaluate<'r,'s> state (graph: Optimization.OptimizedGraph<'r,'s>) =
                 match graph with
