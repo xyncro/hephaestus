@@ -10,7 +10,6 @@ group Build
   nuget Fake
   github xyncro/build build.fsx
   
-
 group Test
 
   framework: >= net45
