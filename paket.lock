@@ -1,5 +1,5 @@
 NUGET
-  remote: http://nuget.org/api/v2
+  remote: http://www.nuget.org/api/v2
   specs:
     Aether (8.0.2)
     Hekate (3.0.0)
@@ -7,17 +7,17 @@ NUGET
 
 GROUP Build
 NUGET
-  remote: http://nuget.org/api/v2
+  remote: http://www.nuget.org/api/v2
   specs:
-    FAKE (4.13.1)
+    FAKE (4.14.2)
 GITHUB
   remote: xyncro/build
   specs:
-    build.fsx (4a4085ceee6a89e7ec33e2a2f67539df52236e19)
+    build.fsx (1ef06d448999e0c0a04b8a35948a5afccfdbfbec)
 GROUP Test
 FRAMEWORK: >= NET45
 NUGET
-  remote: http://nuget.org/api/v2
+  remote: http://www.nuget.org/api/v2
   specs:
     Unquote (3.1.0)
     xunit (2.1.0)
