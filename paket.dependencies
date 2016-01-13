@@ -8,6 +8,8 @@ group Build
   source http://nuget.org/api/v2
 
   nuget Fake
+  github xyncro/build build.fsx
+  
 
 group Test
 
@@ -17,3 +19,4 @@ group Test
   nuget Unquote
   nuget xunit
   nuget xunit.runner.console
+
