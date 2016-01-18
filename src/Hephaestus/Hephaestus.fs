@@ -374,8 +374,8 @@ module Machines =
        The graph implementation is not a Hephaestus user-facing API, and is wrapped
        within the Hephaestus Machine API. *)
 
-    [<AutoOpen>]
-    module internal Graphs =
+    [<RequireQualifiedAccess>]
+    module Graphs =
 
         (* Common *)
 
@@ -440,11 +440,11 @@ module Machines =
                 function | S.Decision (n, _, (l, r)) -> (left n l) :: (right n r) :: edges [] l @ edges [] r @ es
                          | S.Terminal _ -> es
 
-            let translate s =
+            let translate (s, r) =
                 Graph (
                     Graph.create
                         ((RootName, Node Root) :: nodes [] s)
-                        ((RootName, (|SpecificationName|) s, Undefined) :: edges [] s))
+                        ((RootName, (|SpecificationName|) s, Undefined) :: edges [] s)), r
 
         (* Configuration *)
 
@@ -585,7 +585,7 @@ module Machines =
         (* Evaluation *)
 
         [<RequireQualifiedAccess>]
-        module Evaluation =
+        module Execution =
 
             module O = Optimization
 
@@ -604,45 +604,53 @@ module Machines =
                 | n, O.OptimizedDecision f -> async.Bind (f s, fun (v, s) -> eval (next n (Value v) g) s g)
                 | _, O.OptimizedTerminal f -> f s
 
-            let evaluate<'r,'s> state (graph: Optimization.OptimizedGraph<'r,'s>) =
+            let execute<'r,'s> state (graph: Optimization.OptimizedGraph<'r,'s>) =
                 match graph with
                 | Optimization.Graph graph -> eval RootName state graph
+
+    module C = Graphs.Configuration
+    module E = Graphs.Execution
+    module O = Graphs.Optimization
+    module T = Graphs.Translation
 
     (* Types *)
 
     type Machine<'r,'s> =
-        | Machine of ('s -> Async<'r * 's>)
+        | Machine of O.OptimizedGraph<'r,'s>
 
-     and MachinePrototype<'c,'r,'s> =
-        | MachinePrototype of ('c -> Machine<'r,'s>)
+     and Prototype<'c,'r,'s> =
+        | Prototype of T.TranslatedGraph<'c,'r,'s>
+
+    type PrototypeReport =
+        { Logs: string list }
+
+        static member empty =
+            { Logs = List.empty }
 
     (* Machine *)
 
     [<RequireQualifiedAccess>]
     module Machine =
 
-        module C = Configuration
-        module E = Evaluation
-        module O = Optimization
-        module T = Translation
+        let create<'c,'r,'s> (Prototype (g: T.TranslatedGraph<'c,'r,'s>)) configuration =
+            let configured = C.configure configuration g
+            let optimized = O.optimize configured
 
-        (* Initialization *)
+            Machine (optimized)
 
-        let private machine<'r,'s> (graph: O.OptimizedGraph<'r,'s>) =
-            Machine (fun (state: 's) ->
-                E.evaluate state graph)
+        let execute<'r,'s> (Machine (g: O.OptimizedGraph<'r,'s>)) state =
+            E.execute state g
 
-        let private machinePrototype<'c,'r,'s> (graph: T.TranslatedGraph<'c,'r,'s>) =
-            MachinePrototype (fun (configuration: 'c) ->
-                machine ((C.configure configuration >> O.optimize) graph))
+    (* Prototype *)
 
-        (* Operations *)
+    [<RequireQualifiedAccess>]
+    module Prototype =
 
-        let prototype<'c,'r,'s> (m: Model<'c,'r,'s>) =
-            machinePrototype (T.translate m.Specification)
+        let internal translate<'c,'r,'s> (m: Model<'c,'r,'s>, r: PrototypeReport option) =
+            T.translate (m.Specification, r) |> fun (g, r) -> Prototype g, r
 
-        let configure<'c,'r,'s> (MachinePrototype (f : ('c -> Machine<'r,'s>))) configuration =
-            f configuration
+        let createWithReport<'c,'r,'s> (model: Model<'c,'r,'s>) =
+            translate (model, Some PrototypeReport.empty) |> fun (p, r) -> p, Option.get r
 
-        let run<'r,'s> (Machine (f: ('s -> Async<'r * 's>))) state =
-            f state
+        let create<'c,'r,'s> (model: Model<'c,'r,'s>) =
+            translate (model, None) |> fst
