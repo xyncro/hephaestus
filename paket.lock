@@ -1,7 +1,7 @@
 NUGET
   remote: http://www.nuget.org/api/v2
   specs:
-    Aether (8.0.2)
+    Aether (8.1.1)
     Hekate (3.0.0)
       Aether (>= 8.0.2 < 9.0.0)
 
@@ -9,11 +9,11 @@ GROUP Build
 NUGET
   remote: http://www.nuget.org/api/v2
   specs:
-    FAKE (4.14.2)
+    FAKE (4.14.7)
 GITHUB
   remote: xyncro/build
   specs:
-    build.fsx (1ef06d448999e0c0a04b8a35948a5afccfdbfbec)
+    build.fsx (1407924c1087499b7e553ee1270de91844c98c2a)
 GROUP Test
 FRAMEWORK: >= NET45
 NUGET
