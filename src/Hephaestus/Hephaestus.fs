@@ -371,8 +371,9 @@ module Machines =
        (including a possible plugin model which would act as a "plugin-based
        graph compiler").
 
-       The graph implementation is not a Hephaestus user-facing API, and is wrapped
-       within the Hephaestus Machine API. *)
+       The graph implementation is not a user-facing API (although the types
+       are exposed), and is wrapped within the Hephaestus Prototype and Machine
+       APIs. *)
 
     [<RequireQualifiedAccess>]
     module Graphs =
@@ -420,6 +421,12 @@ module Machines =
                 | TranslatedDecision of DecisionConfigurator<'c,'s>
                 | TranslatedTerminal of TerminalConfigurator<'c,'r,'s>
 
+            type TranslationReport =
+                { Logs: string list }
+
+                static member empty =
+                    { Logs = List.empty }
+
             (* Translation
 
                Functions for translating a Hephaestus Specification to a graph based
@@ -440,11 +447,11 @@ module Machines =
                 function | S.Decision (n, _, (l, r)) -> (left n l) :: (right n r) :: edges [] l @ edges [] r @ es
                          | S.Terminal _ -> es
 
-            let translate (s, r) =
-                Graph (
+            let internal translate (report: TranslationReport option) s =
+                report, Graph (
                     Graph.create
                         ((RootName, Node Root) :: nodes [] s)
-                        ((RootName, (|SpecificationName|) s, Undefined) :: edges [] s)), r
+                        ((RootName, (|SpecificationName|) s, Undefined) :: edges [] s))
 
         (* Configuration *)
 
@@ -480,6 +487,12 @@ module Machines =
                     (function | ConfiguredDecision d -> Some d
                               | _ -> None), (ConfiguredDecision)
 
+            type ConfigurationReport =
+                { Logs: string list }
+
+                static member empty =
+                    { Logs = List.empty }
+
             (* Node Mapping *)
 
             let private map<'c,'r,'s> configuration : T.TranslatedGraphType<'c,'r,'s> -> ConfiguredGraphType<'r,'s> =
@@ -490,10 +503,10 @@ module Machines =
 
             (* Configure *)
 
-            let configure<'c,'r,'s> configuration =
+            let internal configure<'c,'r,'s> (r: ConfigurationReport option) c =
                     Optic.get (Lens.ofIsomorphism T.TranslatedGraph<'c,'r,'s>.graph_)
-                 >> map<'c,'r,'s> configuration
-                 >> Graph
+                 >> map<'c,'r,'s> c
+                 >> fun g -> r, Graph g
 
         (* Optimization *)
 
@@ -522,6 +535,12 @@ module Machines =
                 | Node of Node
                 | OptimizedDecision of ('s -> Async<DecisionValue * 's>)
                 | OptimizedTerminal of ('s -> Async<'r * 's>)
+
+            type OptimizationReport =
+                { Logs: string list }
+
+                static member empty =
+                    { Logs = List.empty }
 
             (* Literal Node Elimination *)
 
@@ -575,12 +594,12 @@ module Machines =
 
             (* Optimization *)
 
-            let optimize<'r,'s> =
+            let optimize<'r,'s> (r: OptimizationReport option) =
                    Optic.get (Lens.ofIsomorphism C.ConfiguredGraph<'r,'s>.graph_)
                 >> eliminateLiterals
                 >> eliminateSubgraphs
                 >> map
-                >> Graph
+                >> fun g -> r, Graph g
 
         (* Evaluation *)
 
@@ -613,44 +632,62 @@ module Machines =
     module O = Graphs.Optimization
     module T = Graphs.Translation
 
-    (* Types *)
+    (* Prototype
 
-    type Machine<'r,'s> =
-        | Machine of O.OptimizedGraph<'r,'s>
+       Prototypes are the graph representation of a model from which no Machine
+       has yet been created. They are the result of translation from a model
+       specification form to a graph form. The public creation API allows the
+       passing of an option report parameter which will be populated if a
+       report is passed. *)
 
-     and Prototype<'c,'r,'s> =
+    type Prototype<'c,'r,'s> =
         | Prototype of T.TranslatedGraph<'c,'r,'s>
 
-    type PrototypeReport =
-        { Logs: string list }
+    type PrototypeCreationReport =
+        { Translation: T.TranslationReport }
 
         static member empty =
-            { Logs = List.empty }
-
-    (* Machine *)
-
-    [<RequireQualifiedAccess>]
-    module Machine =
-
-        let create<'c,'r,'s> (Prototype (g: T.TranslatedGraph<'c,'r,'s>)) configuration =
-            let configured = C.configure configuration g
-            let optimized = O.optimize configured
-
-            Machine (optimized)
-
-        let execute<'r,'s> (Machine (g: O.OptimizedGraph<'r,'s>)) state =
-            E.execute state g
-
-    (* Prototype *)
+            { Translation = T.TranslationReport.empty }
 
     [<RequireQualifiedAccess>]
     module Prototype =
 
-        let internal translate<'c,'r,'s> (m: Model<'c,'r,'s>, r: PrototypeReport option) =
-            T.translate (m.Specification, r) |> fun (g, r) -> Prototype g, r
+        let create<'c,'r,'s> (report: PrototypeCreationReport option) (model: Model<'c,'r,'s>)  =
+            T.translate (Option.map (fun r -> r.Translation) report) model.Specification
+            |> fun (t, g) -> (Option.map (fun r ->
+                { r with Translation = Option.get t }) report), Prototype g
 
-        let createWithReport<'c,'r,'s> (model: Model<'c,'r,'s>) =
-            translate (model, Some PrototypeReport.empty) |> fun (p, r) -> p, Option.get r
+    (* Machine
 
-        let create<'c,'r,'s> (model: Model<'c,'r,'s>) =
-            translate (model, None) |> fst
+       Machines are configured and optimized graphs, prepared for execution
+       given appropriate state. They are created from a prepared prototype.
+       As with the public prototype API, the creation function allows the
+       passing of an option report parameter which will be populated if a
+       report is passed.
+
+       Execution may also take an option report parameter, which will be
+       returned asynchronously as part of the result. *)
+
+    type Machine<'r,'s> =
+        | Machine of O.OptimizedGraph<'r,'s>
+
+    type MachineCreationReport =
+        { Configuration: C.ConfigurationReport
+          Optimization: O.OptimizationReport }
+
+        static member empty =
+            { Configuration = C.ConfigurationReport.empty
+              Optimization = O.OptimizationReport.empty }
+
+    [<RequireQualifiedAccess>]
+    module Machine =
+
+        let create<'c,'r,'s> (report: MachineCreationReport option) (Prototype (g: T.TranslatedGraph<'c,'r,'s>)) configuration =
+            C.configure (Option.map (fun r -> r.Configuration) report) configuration g
+            |> fun (c, g) -> c, O.optimize (Option.map (fun r -> r.Optimization) report) g
+            |> fun (c, (o, g)) -> (Option.map (fun r ->
+                { r with Configuration = Option.get c
+                         Optimization = Option.get o }) report), Machine g
+
+        let execute<'r,'s> (Machine (g: O.OptimizedGraph<'r,'s>)) state =
+            E.execute state g
