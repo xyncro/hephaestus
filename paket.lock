@@ -2,7 +2,7 @@ NUGET
   remote: http://www.nuget.org/api/v2
   specs:
     Aether (8.1.1)
-    Hekate (3.0.0)
+    Hekate (3.2.0)
       Aether (>= 8.0.2 < 9.0.0)
 
 GROUP Build
