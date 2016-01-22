@@ -135,11 +135,11 @@ let main _ =
 
     // Prototype
 
-    let _, prototype = Prototype.create None model
+    let prototype, prototypeLog = Prototype.create model (Some PrototypeCreationLog.empty)
 
     // Machine
 
-    let creation, machine = Machine.create (Some MachineCreationLog.empty) prototype configuration
+    let machine, machineLog = Machine.create prototype configuration (Some MachineCreationLog.empty)
 
     // Usage
 
