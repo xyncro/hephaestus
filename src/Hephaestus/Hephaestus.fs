@@ -31,6 +31,9 @@ module internal Prelude =
     let flip (a, b) =
         (b, a)
 
+    let tuple a b =
+        (a, b)
+
     (* Equality/Comparison
 
        Functions for simplifying the customization of equality
@@ -506,13 +509,20 @@ module Machines =
                 >-> TranslationStatistics.nodes_
                 >-> TranslationNodes.terminals_
 
+            let private edges_ =
+                    TranslationLog.statistics_
+                >-> TranslationStatistics.edges_
+
             let private translatedDecision k =
-                    Common.log operations_ ((@) [ TranslatedDecision k ])
+                    Common.log operations_ (fun os -> os @ [TranslatedDecision k ])
+                 >> Common.log decisions_ Common.increment
 
             let private translatedTerminal k =
-                    Common.log operations_ ((@) [ TranslatedTerminal k ])
+                    Common.log operations_ (fun os -> os @ [ TranslatedTerminal k ])
+                 >> Common.log terminals_ Common.increment
 
-            // TODO: Statistics
+            let private translatedEdge =
+                    Common.log edges_ Common.increment
 
             (* Translation
 
@@ -559,8 +569,8 @@ module Machines =
                                              | Specifications.Terminal _ -> g, log
 
             and private edge n l r =
-                    fun (g, log) -> Graph.Edges.add (edgeLeft n l) g, log
-                 >> fun (g, log) -> Graph.Edges.add (edgeRight n r) g, log
+                    fun (g, log) -> Graph.Edges.add (edgeLeft n l) g, translatedEdge log
+                 >> fun (g, log) -> Graph.Edges.add (edgeRight n r) g, translatedEdge log
                  >> fun (g, log) -> edges (g, log) l
                  >> fun (g, log) -> edges (g, log) r
 
@@ -675,15 +685,15 @@ module Machines =
             (* Functions *)
 
             let private configuredDecisionLiteral k l =
-                    Common.log operations_ ((@) [ ConfiguredDecision (k, ConfiguredLiteral l) ])
+                    Common.log operations_ (fun os -> os @ [ ConfiguredDecision (k, ConfiguredLiteral l) ])
                  >> Common.log literals_ Common.increment
 
             let private configuredDecisionFunction k =
-                    Common.log operations_ ((@) [ ConfiguredDecision (k, ConfiguredFunction) ])
+                    Common.log operations_ (fun os -> os @ [ ConfiguredDecision (k, ConfiguredFunction) ])
                  >> Common.log functions_ Common.increment
 
             let private configuredTerminal k =
-                    Common.log operations_ ((@) [ ConfiguredTerminal (k) ])
+                    Common.log operations_ (fun os -> os @ [ ConfiguredTerminal (k) ])
                  >> Common.log terminals_ Common.increment
 
             (* Configuration
@@ -743,18 +753,64 @@ module Machines =
             | OptimizedTerminal of ('s -> Async<'r * 's>)
 
         type OptimizationLog =
-             { Logs: string list }
+            { Operations: OptimizationOperation list
+              Statistics: OptimizationStatistics }
 
-             static member empty =
-                 { Logs = List.empty }
+            static member empty =
+                 { Operations = List.empty
+                   Statistics = OptimizationStatistics.empty }
+
+            static member operations_ =
+                (fun x -> x.Operations), (fun o x -> { x with OptimizationLog.Operations = o })
+
+            static member statistics_ =
+                (fun x -> x.Statistics), (fun s x -> { x with OptimizationLog.Statistics = s })
+
+         and OptimizationOperation =
+            | EliminatedLiteral of string list
+            | EliminatedSubgraphRoot of string list
+
+         and OptimizationStatistics =
+            { Literals: int
+              SubgraphRoots: int }
+
+            static member empty =
+                { Literals = 0
+                  SubgraphRoots = 0 }
+
+            static member literals_ =
+                (fun x -> x.Literals), (fun l x -> { x with OptimizationStatistics.Literals = l })
+
+            static member subgraphRoots_ =
+                (fun x -> x.SubgraphRoots), (fun s x -> { x with OptimizationStatistics.SubgraphRoots = s })
 
         [<RequireQualifiedAccess>]
         module Optimization =
 
+            (* Logging *)
+
+            let private operations_ =
+                    OptimizationLog.operations_
+
+            let private literals_ =
+                    OptimizationLog.statistics_
+                >-> OptimizationStatistics.literals_
+
+            let private subgraphRoots_ =
+                    OptimizationLog.statistics_
+                >-> OptimizationStatistics.subgraphRoots_
+
+            let private eliminatedLiteral k =
+                    Common.log operations_ (fun os -> EliminatedLiteral k :: os)
+                 >> Common.log literals_ Common.increment
+
+            let private eliminatedSubgraphRoot k =
+                    Common.log operations_ (fun os -> EliminatedSubgraphRoot k :: os)
+                 >> Common.log subgraphRoots_ Common.increment
 
             (* Literal Node Elimination *)
 
-            let private node<'r,'s> : ConfiguredGraphType<'r,'s> -> (string list * DecisionValue) option =
+            let private literal<'r,'s> : ConfiguredGraphType<'r,'s> -> (string list * DecisionValue) option =
                     Graph.Nodes.toList
                  >> List.tryPick (function | n, ConfiguredNode.ConfiguredDecision (Literal v) -> Some (n, v)
                                            | _ -> None)
@@ -770,15 +826,15 @@ module Machines =
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
 
-            let rec private eliminateLiterals<'r,'s> (graph: ConfiguredGraphType<'r,'s>) =
-                match node graph with
+            let rec private eliminateLiterals<'r,'s> (graph: ConfiguredGraphType<'r,'s>, l) =
+                match literal graph with
                 | Some (n, v) ->
                     eliminateLiterals (
-                        graph
-                        |> Graph.Nodes.remove n
-                        |> Graph.Edges.addMany (edges n (target n v graph) graph))
+                        (graph
+                         |> Graph.Nodes.remove n
+                         |> Graph.Edges.addMany (edges n (target n v graph) graph)), eliminatedLiteral n l)
                 | _ ->
-                    graph
+                    graph, l
 
             (* Subgraph Elimination *)
 
@@ -788,14 +844,14 @@ module Machines =
                                            | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
                                            | _ -> None)
 
-            let rec private eliminateSubgraphs<'r,'s> (graph: ConfiguredGraphType<'r,'s>) =
+            let rec private eliminateSubgraphs<'r,'s> (graph: ConfiguredGraphType<'r,'s>, l) =
                 match subgraph graph with
-                | Some n -> eliminateSubgraphs (Graph.Nodes.remove n graph)
-                | _ -> graph
+                | Some n -> eliminateSubgraphs (Graph.Nodes.remove n graph, eliminatedSubgraphRoot n l)
+                | _ -> graph, l
 
-            (* Node Mapping *)
+            (* Node Conversion *)
 
-            let private map<'r,'s> : ConfiguredGraphType<'r,'s> -> OptimizedGraphType<'r,'s> =
+            let private convert<'r,'s> : ConfiguredGraphType<'r,'s> -> OptimizedGraphType<'r,'s> =
                 Graph.Nodes.map (fun _ ->
                     function | ConfiguredNode n -> OptimizedNode n
                              | ConfiguredNode.ConfiguredDecision (Function f) -> OptimizedDecision f
@@ -804,13 +860,13 @@ module Machines =
 
             (* Optimization *)
 
-            // TODO: Nicer
+            let private graph g =
+                    tuple g
+                 >> eliminateLiterals
+                 >> eliminateSubgraphs
 
             let internal optimize<'r,'s> (ConfiguredGraph.Graph (g: ConfiguredGraphType<'r,'s>)) l =
-                eliminateLiterals g
-                |> eliminateSubgraphs
-                |> map
-                |> fun g -> Graph g, l
+                    Graph ^>> convert ^>> graph g l
 
         (* Execution *)
 
