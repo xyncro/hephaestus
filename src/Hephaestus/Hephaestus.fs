@@ -3,10 +3,13 @@
 open System
 open Aether
 open Aether.Operators
+open Anat
+open Anat.Operators
 open Hekate
 
 // TODO: Pre/post-condition analysis
 // TODO: Logging/Introspection mechanisms
+// TODO: Simplify with Arrows where possible
 
 (* Notes
 
@@ -28,7 +31,7 @@ module internal Prelude =
     type Pair<'a> =
         'a * 'a
 
-    let flip (a, b) =
+    let swap (a, b) =
         (b, a)
 
     let tuple a b =
@@ -51,14 +54,6 @@ module internal Prelude =
         match y with
         | :? 'T as y -> compare (f x) (f y)
         | _ -> invalidArg "y" "cannot compare values of different types"
-
-    (* Arrows *)
-
-    let internal (^>>) f (a, b) =
-        (f a, b)
-
-    let internal (>>^) f (a, b) =
-        (a, f b)
 
 (* Types
 
@@ -542,16 +537,16 @@ module Machines =
                 n, TranslatedNode.TranslatedTerminal c
 
             let rec private nodes =
-                    fun (g, log) -> function | Specification.Decision (n, c, (l, r)) -> decision n c l r (g, log)
-                                             | Specification.Terminal (n, c) -> terminal n c (g, log)
+                function | Specification.Decision (n, c, (l, r)) -> decision n c l r
+                         | Specification.Terminal (n, c) -> terminal n c
 
             and private decision n c l r =
-                    fun (g, log) -> Graph.Nodes.add (nodeDecision n c) g, translatedDecision n log
-                 >> fun (g, log) -> nodes (g, log) l
-                 >> fun (g, log) -> nodes (g, log) r
+                    Graph.Nodes.add (nodeDecision n c) *** translatedDecision n
+                >>> nodes l
+                >>> nodes r
 
             and private terminal n c =
-                    fun (g, log) -> Graph.Nodes.add (nodeTerminal n c) g, translatedTerminal n log
+                    Graph.Nodes.add (nodeTerminal n c) *** translatedTerminal n
 
             (* Edges *)
 
@@ -565,25 +560,28 @@ module Machines =
                 n, (|SpecificationName|) s, Value Right
 
             let rec private edges =
-                    fun (g, log) -> function | Specifications.Decision (n, _, (l, r)) -> edge n l r (g, log)
-                                             | Specifications.Terminal _ -> g, log
+                function | Specifications.Decision (n, _, (l, r)) -> edge n l r
+                         | Specification.Terminal _ -> id
 
             and private edge n l r =
-                    fun (g, log) -> Graph.Edges.add (edgeLeft n l) g, translatedEdge log
-                 >> fun (g, log) -> Graph.Edges.add (edgeRight n r) g, translatedEdge log
-                 >> fun (g, log) -> edges (g, log) l
-                 >> fun (g, log) -> edges (g, log) r
+                    Graph.Edges.add (edgeLeft n l) *** translatedEdge
+                >>> Graph.Edges.add (edgeRight n r) *** translatedEdge
+                >>> edges l
+                >>> edges r
 
             (* Graph *)
 
             let private graph s =
-                    fun (g, log) -> Graph.Nodes.add nodeRoot ^>> nodes (g, log) s
-                 >> fun (g, log) -> Graph.Edges.add (edgeRoot s) ^>> edges (g, log) s
+                    nodes s
+                >>> edges s
+                >>> first (Graph.Nodes.add nodeRoot)
+                >>> first (Graph.Edges.add (edgeRoot s))
 
             (* Translate *)
 
-            let internal translate s l =
-                    Graph ^>> graph s (Graph.empty, l)
+            let internal translate s =
+                    fun l -> graph s (Graph.empty, l)
+                >>> first Graph
 
         (* Configuration *)
 
@@ -722,12 +720,13 @@ module Machines =
 
             let private graph c l =
                     Graph.Nodes.mapFold (fun l k n -> nodes k c l n) l
-                 >> flip
+                 >> swap
 
             (* Configure *)
 
-            let internal configure<'c,'r,'s> (TranslatedGraph.Graph (g: TranslatedGraphType<'c,'r,'s>)) c l =
-                    Graph ^>> graph c l g
+            let internal configure<'c,'r,'s> (TranslatedGraph.Graph (g: TranslatedGraphType<'c,'r,'s>)) c =
+                    (fun l -> graph c l g)
+                >>> first Graph
 
         (* Optimization *)
 
@@ -865,8 +864,10 @@ module Machines =
                  >> eliminateLiterals
                  >> eliminateSubgraphs
 
-            let internal optimize<'r,'s> (ConfiguredGraph.Graph (g: ConfiguredGraphType<'r,'s>)) l =
-                    Graph ^>> convert ^>> graph g l
+            let internal optimize<'r,'s> (ConfiguredGraph.Graph (g: ConfiguredGraphType<'r,'s>)) =
+                    graph g
+                >>> first convert
+                >>> first Graph
 
         (* Execution *)
 
