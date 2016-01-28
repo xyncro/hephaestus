@@ -813,11 +813,6 @@ module Machines =
 
             (* Literal Node Elimination *)
 
-            let private literal<'r,'s> : ConfiguredGraphType<'r,'s> -> (string list * DecisionValue) option =
-                    Graph.Nodes.toList
-                 >> List.tryPick (function | n, ConfiguredNode.ConfiguredDecision (Literal v) -> Some (n, v)
-                                           | _ -> None)
-
             let private outward<'r,'s> n v : ConfiguredGraphType<'r,'s> -> string list =
                     Graph.Nodes.outward n
                  >> Option.get
@@ -829,27 +824,32 @@ module Machines =
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
 
-            let rec private eliminateLiterals<'r,'s> (graph: ConfiguredGraphType<'r,'s>, l) =
-                match literal graph with
-                | Some (n, v) -> eliminateLiterals (shortcut n v graph, eliminatedLiteral n l)
+            let rec private eliminateLiterals (graph: ConfiguredGraphType<'r,'s>, l) =
+                match findLiteral graph with
+                | Some (n, v) -> eliminateLiterals (bypassLiteral n v graph, eliminatedLiteral n l)
                 | _ -> graph, l
 
-            and private shortcut n v =
+            and private findLiteral (graph: ConfiguredGraphType<'r,'s>) =
+                 Graph.Nodes.toList graph
+                 |> List.tryPick (function | n, ConfiguredNode.ConfiguredDecision (Literal v) -> Some (n, v)
+                                           | _ -> None)
+
+            and private bypassLiteral n v =
                     ((outward n v &&& id) >>> uncurry (inward n)) &&& id >>> uncurry Graph.Edges.addMany
                 >>> Graph.Nodes.remove n
 
             (* Subgraph Elimination *)
 
-            let private subgraph<'r,'s> (graph: ConfiguredGraphType<'r,'s>) =
+            let rec private eliminateSubgraphs (graph: ConfiguredGraphType<'r,'s>, l) =
+                match findSubgraph graph with
+                | Some n -> eliminateSubgraphs (Graph.Nodes.remove n graph, eliminatedSubgraphRoot n l)
+                | _ -> graph, l
+
+            and private findSubgraph (graph: ConfiguredGraphType<'r,'s>) =
                  Graph.Nodes.toList graph
                  |> List.tryPick (function | _, ConfiguredNode Node -> None
                                            | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
                                            | _ -> None)
-
-            let rec private eliminateSubgraphs<'r,'s> (graph: ConfiguredGraphType<'r,'s>, l) =
-                match subgraph graph with
-                | Some n -> eliminateSubgraphs (Graph.Nodes.remove n graph, eliminatedSubgraphRoot n l)
-                | _ -> graph, l
 
             (* Node Conversion *)
 
