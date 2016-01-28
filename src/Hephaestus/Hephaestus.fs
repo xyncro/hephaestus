@@ -9,7 +9,6 @@ open Hekate
 
 // TODO: Pre/post-condition analysis
 // TODO: Logging/Introspection mechanisms
-// TODO: Simplify with Arrows where possible
 
 (* Notes
 
@@ -31,11 +30,17 @@ module internal Prelude =
     type Pair<'a> =
         'a * 'a
 
+    let flip f =
+        fun a b -> f b a
+
     let swap (a, b) =
         (b, a)
 
     let tuple a b =
         (a, b)
+
+    let uncurry f =
+        fun (a, b) -> f a b
 
     (* Equality/Comparison
 
@@ -222,6 +227,12 @@ module Models =
         { Components: ComponentMetadata list
           Specification: Specification<'c,'r,'s> }
 
+        static member components_ : Lens<Model<'c,'r,'s>,ComponentMetadata list> =
+            (fun x -> x.Components), (fun c x -> { x with Components = c })
+
+        static member specification_ : Lens<Model<'c,'r,'s>,Specification<'c,'r,'s>> =
+            (fun x -> x.Specification), (fun s x -> { x with Specification = s })
+
      and Component<'c,'r,'s> =
         { Metadata: ComponentMetadata
           Requirements: ComponentRequirements
@@ -278,22 +289,29 @@ module Models =
     [<RequireQualifiedAccess>]
     module internal Order =
 
+        (* Optics *)
+
+        let private name_<'c,'r,'s> =
+                Component<'c,'r,'s>.metadata_
+            >-> ComponentMetadata.name_
+
+        let private required_<'c,'r,'s> =
+                Component<'c,'r,'s>.requirements_
+            >-> ComponentRequirements.required_
+
+        (* Functions *)
+
         let private nodes<'c,'r,'s> =
-                List.map (fun m ->
-                    Optic.get (
-                            Component<'c,'r,'s>.metadata_ 
-                        >-> ComponentMetadata.name_) m, m)
+                List.map (Optic.get name_<'c,'r,'s> &&& id)
 
         let private edges<'c,'r,'s> =
-                List.map (fun m ->
-                    Optic.get (Component<'c,'r,'s>.metadata_ >-> ComponentMetadata.name_) m,
-                    Optic.get (Component<'c,'r,'s>.requirements_ >-> ComponentRequirements.required_) m)
-             >> List.map (fun (n, rs) ->
-                    List.map (fun n' -> n', n, ()) (Set.toList rs))
-             >> List.concat
+                List.map (Optic.get name_<'c,'r,'s> &&& Optic.get required_<'c,'r,'s>)
+            >>> List.map (fun (n, rs) -> List.map (fun n' -> n', n, ()) (Set.toList rs))
+            >>> List.concat
 
-        let private graph<'c,'r,'s> modules =
-            Graph.create (nodes<'c,'r,'s> modules) (edges<'c,'r,'s> modules)
+        let private graph<'c,'r,'s> =
+                nodes<'c,'r,'s> &&& edges<'c,'r,'s>
+            >>> uncurry Graph.create
 
         let private independent graph =
             Graph.Nodes.toList graph
@@ -527,60 +545,46 @@ module Machines =
 
             (* Nodes *)
 
-            let private nodeRoot =
-                RootName, TranslatedNode Node
-
-            let private nodeDecision n c =
-                n, TranslatedNode.TranslatedDecision c
-
-            let private nodeTerminal n c =
-                n, TranslatedNode.TranslatedTerminal c
-
             let rec private nodes =
-                function | Specification.Decision (n, c, (l, r)) -> decision n c l r
-                         | Specification.Terminal (n, c) -> terminal n c
+                    function | Specification.Decision (n, c, (l, r)) -> decision n c l r
+                             | Specification.Terminal (n, c) -> terminal n c
 
             and private decision n c l r =
-                    Graph.Nodes.add (nodeDecision n c) *** translatedDecision n
-                >>> nodes l
+                    nodes l
                 >>> nodes r
+                >>> Graph.Nodes.add (n, TranslatedNode.TranslatedDecision c) *** translatedDecision n
 
             and private terminal n c =
-                    Graph.Nodes.add (nodeTerminal n c) *** translatedTerminal n
+                    Graph.Nodes.add (n, TranslatedNode.TranslatedTerminal c) *** translatedTerminal n
 
             (* Edges *)
 
-            let private edgeRoot s =
-                RootName, (|SpecificationName|) s, Undefined
-
-            let private edgeLeft n s =
-                n, (|SpecificationName|) s, Value Left
-
-            let private edgeRight n s =
-                n, (|SpecificationName|) s, Value Right
-
             let rec private edges =
-                function | Specifications.Decision (n, _, (l, r)) -> edge n l r
-                         | Specification.Terminal _ -> id
+                    function | Specifications.Decision (n, _, (l, r)) -> edge n l r
+                             | Specification.Terminal _ -> id
 
             and private edge n l r =
-                    Graph.Edges.add (edgeLeft n l) *** translatedEdge
-                >>> Graph.Edges.add (edgeRight n r) *** translatedEdge
-                >>> edges l
+                    edges l
                 >>> edges r
+                >>> Graph.Edges.add (n, (|SpecificationName|) l, Value Left) *** translatedEdge
+                >>> Graph.Edges.add (n, (|SpecificationName|) r, Value Right) *** translatedEdge
 
             (* Graph *)
+
+            let private empty _ =
+                    Graph.empty
 
             let private graph s =
                     nodes s
                 >>> edges s
-                >>> first (Graph.Nodes.add nodeRoot)
-                >>> first (Graph.Edges.add (edgeRoot s))
+                >>> first (Graph.Nodes.add (RootName, TranslatedNode Node))
+                >>> first (Graph.Edges.add (RootName, (|SpecificationName|) s, Undefined))
 
             (* Translate *)
 
             let internal translate s =
-                    fun l -> graph s (Graph.empty, l)
+                    empty &&& id
+                >>> graph s
                 >>> first Graph
 
         (* Configuration *)
@@ -706,20 +710,20 @@ module Machines =
             let private node l =
                 function | Node -> ConfiguredNode (Node), l
 
-            let private decision k l =
+            let private decision l k =
                 function | Literal v -> ConfiguredNode.ConfiguredDecision (Literal v), configuredDecisionLiteral k v l
                          | Function f -> ConfiguredNode.ConfiguredDecision (Function f), configuredDecisionFunction k l
 
-            let private terminal k l =
+            let private terminal l k =
                 function | f -> ConfiguredNode.ConfiguredTerminal f, configuredTerminal k l
 
-            let private nodes k c l =
+            let private nodes c l k =
                 function | TranslatedNode n -> node l n
-                         | TranslatedNode.TranslatedDecision f -> decision k l (f c)
-                         | TranslatedNode.TranslatedTerminal f -> terminal k l (f c)
+                         | TranslatedNode.TranslatedDecision f -> decision l k (f c)
+                         | TranslatedNode.TranslatedTerminal f -> terminal l k (f c)
 
             let private graph c l =
-                    Graph.Nodes.mapFold (fun l k n -> nodes k c l n) l
+                    Graph.Nodes.mapFold (nodes c) l
                  >> swap
 
             (* Configure *)
@@ -814,26 +818,25 @@ module Machines =
                  >> List.tryPick (function | n, ConfiguredNode.ConfiguredDecision (Literal v) -> Some (n, v)
                                            | _ -> None)
 
-            let private target<'r,'s> n v : ConfiguredGraphType<'r,'s> -> string list =
+            let private outward<'r,'s> n v : ConfiguredGraphType<'r,'s> -> string list =
                     Graph.Nodes.outward n
                  >> Option.get
                  >> List.pick (function | _, t, Value v' when v = v' -> Some t
                                         | _ -> None)
 
-            let private edges<'r,'s> n t : ConfiguredGraphType<'r,'s> -> LEdge<string list,Edge> list =
+            let private inward<'r,'s> n t : ConfiguredGraphType<'r,'s> -> LEdge<string list,Edge> list =
                     Graph.Nodes.inward n
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
 
             let rec private eliminateLiterals<'r,'s> (graph: ConfiguredGraphType<'r,'s>, l) =
                 match literal graph with
-                | Some (n, v) ->
-                    eliminateLiterals (
-                        (graph
-                         |> Graph.Nodes.remove n
-                         |> Graph.Edges.addMany (edges n (target n v graph) graph)), eliminatedLiteral n l)
-                | _ ->
-                    graph, l
+                | Some (n, v) -> eliminateLiterals (shortcut n v graph, eliminatedLiteral n l)
+                | _ -> graph, l
+
+            and private shortcut n v =
+                    ((outward n v &&& id) >>> uncurry (inward n)) &&& id >>> uncurry Graph.Edges.addMany
+                >>> Graph.Nodes.remove n
 
             (* Subgraph Elimination *)
 
@@ -907,15 +910,27 @@ module Machines =
         static member empty =
             { Translation = TranslationLog.empty }
 
+        static member translation_ =
+            (fun x -> x.Translation), (fun t x -> { x with Translation = t })
+
     [<RequireQualifiedAccess>]
     module Prototype =
 
-        let private translate model log =
-            Translation.translate model.Specification (Option.map (fun r -> r.Translation) log)
+        let private translation_ =
+                Option.value_
+            >?> PrototypeCreationLog.translation_
 
-        let create<'c,'r,'s> (model: Model<'c,'r,'s>) log =
-            translate model log
-            |> fun (g, l) -> Prototype g, Option.map (fun r -> { r with Translation = Option.get l }) log
+        let private translate model =
+                tuple model
+            >>> Optic.get Model.specification_ *** Optic.get translation_
+            >>> uncurry Translation.translate
+
+        let private prepare log =
+                Prototype *** (Option.get >> flip (Optic.set translation_) log)
+
+        let create<'c,'r,'s> (model: Model<'c,'r,'s>) =
+                id &&& translate model
+            >>> uncurry prepare
 
     (* Machine
 
@@ -948,7 +963,7 @@ module Machines =
         let private optimize graph log =
             Optimization.optimize graph (Option.map (fun l -> l.Optimization) log)
 
-        // TODO: Nicer
+        // TODO: Nicer (Arrows?)
 
         let create<'c,'r,'s> (Prototype (g: TranslatedGraph<'c,'r,'s>)) configuration log =
             configure g configuration log
