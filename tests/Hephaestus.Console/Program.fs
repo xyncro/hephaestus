@@ -131,17 +131,19 @@ let main _ =
 
     // Model
 
-    let model =  Model.create (set [ HttpOptions.exports; HttpCore.exports ])
+    let model = Model.create (set [ HttpOptions.exports; HttpCore.exports ])
+
+    // Prototype
+
+    let prototype, prototypeLog = Prototype.createLogged model
 
     // Machine
 
-    let prototype = Machine.prototype model
-    let machine = Machine.configure prototype configuration
+    let machine, machineLog = Machine.createLogged prototype configuration
 
-    // HTTP
+    // Usage
 
-    let http = Machine.run machine
-    let _, results = Async.RunSynchronously (http state)
+    let result, state = Machine.execute machine state |> Async.RunSynchronously
 
     // Wait
 
