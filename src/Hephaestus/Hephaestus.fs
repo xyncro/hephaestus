@@ -584,9 +584,9 @@ module Machines =
 
             (* Translate *)
 
-            let internal translate s =
-                    empty &&& id
-                >>> graph s
+            let internal translate _ =
+                    id *** tuple Graph.empty
+                >>> uncurry graph
                 >>> first Translated
 
         (* Configuration *)
@@ -724,14 +724,14 @@ module Machines =
                          | Translation.Decision f -> decision l k (f c)
                          | Translation.Terminal f -> terminal l k (f c)
 
-            let private graph c l =
-                    Graph.Nodes.mapFold (nodes c) l
+            let private graph c =
+                    uncurry (flip (Graph.Nodes.mapFold (nodes c)))
                  >> swap
 
             (* Configure *)
 
-            let internal configure<'c,'r,'s> (Translation.Translated (g: Translation.GraphType<'c,'r,'s>)) c =
-                    (fun l -> graph c l g)
+            let internal configure c =
+                    graph c
                 >>> first Configured
 
         (* Optimization *)
@@ -926,23 +926,22 @@ module Machines =
 
         (* Functions *)
 
-        let private translate model =
-                tuple model
-            >>> Optic.get Model.specification_ *** Optic.get translation_
-            >>> uncurry Translation.translate
+        let private translate _ =
+                Optic.get Model.specification_ *** Optic.get translation_ >>> Translation.translate () &&& snd
+            >>> function | (t, Some l), log -> t, Optic.set translation_ l log
+                         | (t, _), log -> t, log
 
-        let private prepare log =
-                Prototype *** (Option.get >> flip (Optic.set translation_) log)
-
-        let private prototype model =
-                id &&& translate model
-            >>> uncurry prepare
+        let private run _ =
+                translate ()
+            >>> first Prototype
 
         let create<'c,'r,'s> (model: Model<'c,'r,'s>) =
-                prototype model None |> fst
+                run () (model, None)
+             |> fst
 
         let createLogged<'c,'r,'s> (model: Model<'c,'r,'s>) =
-                prototype model (Some PrototypeCreationLog.empty) |> second Option.get
+                run () (model, Some PrototypeCreationLog.empty)
+             |> second Option.get
 
     (* Machine
 
@@ -971,22 +970,53 @@ module Machines =
                 { Configuration = Configuration.Log.empty
                   Optimization = Optimization.Log.empty }
 
-        (* Functions *)
+            static member configuration_ =
+                (fun x -> x.Configuration), (fun c x -> { x with Configuration = c })
 
-        let private configure graph configuration log =
-            Configuration.configure graph configuration (Option.map (fun l -> l.Configuration) log)
+            static member optimization_ =
+                (fun x -> x.Optimization), (fun o x -> { x with Optimization = o })
 
-        let private optimize graph log =
-            Optimization.optimize graph (Option.map (fun l -> l.Optimization) log)
+        (* Optics *)
 
-        // TODO: Nicer (Arrows?)
+        let private configuration_ =
+                Option.value_
+            >?> MachineCreationLog.configuration_
 
-        let create<'c,'r,'s> (Prototype.Prototype (g: Translation.Translated<'c,'r,'s>)) configuration log =
-            configure g configuration log
-            |> fun (g, lc) -> optimize g log, lc
-            |> fun ((g, lo), lc) -> Machine g, (Option.map (fun r ->
-                { r with Configuration = Option.get lc
-                         Optimization = Option.get lo }) log)
+        let private optimization_ =
+                Option.value_
+            >?> MachineCreationLog.optimization_
+
+        (* Patterns *)
+
+        let private (|Translated|) =
+            function | Prototype.Prototype (Translation.Translated t) -> t
+
+        (* Creation *)
+
+        let private configure c =
+                id *** Optic.get configuration_ >>> Configuration.configure c &&& snd
+            >>> function | (c, Some l), log -> c, Optic.set configuration_ l log
+                         | (c, _), log -> c, log
+
+        let private optimize _ =
+                id *** Optic.get optimization_ >>> uncurry Optimization.optimize &&& snd
+            >>> function | (o, Some l), log -> o, Optic.set optimization_ l log
+                         | (o, _), log -> o, log
+
+        let private run c =
+                configure c
+            >>> optimize ()
+            >>> first Machine
+
+        let create<'c,'r,'s> (Translated (translated: Translation.GraphType<'c,'r,'s>)) configuration =
+                run configuration (translated, None)
+             |> fst
+
+        let createLogged<'c,'r,'s> (Translated (translated: Translation.GraphType<'c,'r,'s>)) configuration =
+                run configuration (translated, Some MachineCreationLog.empty)
+             |> second Option.get
+
+        (* Execution *)
 
         let execute<'r,'s> (Machine (g: Optimization.Optimized<'r,'s>)) state =
             Execution.execute state g
