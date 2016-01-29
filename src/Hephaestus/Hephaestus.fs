@@ -67,8 +67,6 @@ module internal Prelude =
    of the Hephaestus system (i.e. those designing and implementing Hephaestus
    components. *)
 
-(* Decisions *)
-
 type Decision<'s> =
     | Function of ('s -> Async<DecisionValue * 's>)
     | Literal of DecisionValue
@@ -868,8 +866,8 @@ module Machines =
                  >> eliminateLiterals
                  >> eliminateSubgraphs
 
-            let internal optimize<'r,'s> (Configuration.Configured (g: Configuration.GraphType<'r,'s>)) =
-                    graph g
+            let internal optimize _ =
+                    uncurry graph
                 >>> first convert
                 >>> first Optimized
 
@@ -924,24 +922,32 @@ module Machines =
                 Option.value_
             >?> PrototypeCreationLog.translation_
 
+        (* Patterns *)
+
+        let private (|Specification|) =
+            function { Specification = s } -> s
+
+        (* Creation *)
+
+        [<RequireQualifiedAccess>]
+        module private Create =
+
+            let private translate _ =
+                    (|Specification|) *** Optic.get translation_ >>> Translation.translate () &&& snd
+                >>> function | (t, Some l), log -> t, Optic.set translation_ l log
+                             | (t, _), log -> t, log
+
+            let create _ =
+                    translate ()
+                >>> first Prototype
+
         (* Functions *)
 
-        let private translate _ =
-                Optic.get Model.specification_ *** Optic.get translation_ >>> Translation.translate () &&& snd
-            >>> function | (t, Some l), log -> t, Optic.set translation_ l log
-                         | (t, _), log -> t, log
-
-        let private run _ =
-                translate ()
-            >>> first Prototype
-
         let create<'c,'r,'s> (model: Model<'c,'r,'s>) =
-                run () (model, None)
-             |> fst
+            Create.create () (model, None) |> fst
 
         let createLogged<'c,'r,'s> (model: Model<'c,'r,'s>) =
-                run () (model, Some PrototypeCreationLog.empty)
-             |> second Option.get
+            Create.create () (model, Some PrototypeCreationLog.empty) |> second Option.get
 
     (* Machine
 
@@ -989,34 +995,38 @@ module Machines =
         (* Patterns *)
 
         let private (|Translated|) =
-            function | Prototype.Prototype (Translation.Translated t) -> t
+            function | Translation.Translated t -> t
+
+        let private (|Configured|) =
+            function | Configuration.Configured c -> c
 
         (* Creation *)
 
-        let private configure c =
-                id *** Optic.get configuration_ >>> Configuration.configure c &&& snd
-            >>> function | (c, Some l), log -> c, Optic.set configuration_ l log
-                         | (c, _), log -> c, log
+        [<RequireQualifiedAccess>]
+        module private Create =
 
-        let private optimize _ =
-                id *** Optic.get optimization_ >>> uncurry Optimization.optimize &&& snd
-            >>> function | (o, Some l), log -> o, Optic.set optimization_ l log
-                         | (o, _), log -> o, log
+            let private configure c =
+                    (|Translated|) *** Optic.get configuration_ >>> Configuration.configure c &&& snd
+                >>> function | (c, Some l), log -> c, Optic.set configuration_ l log
+                             | (c, _), log -> c, log
 
-        let private run c =
-                configure c
-            >>> optimize ()
-            >>> first Machine
+            let private optimize _ =
+                    (|Configured|) *** Optic.get optimization_ >>> Optimization.optimize () &&& snd
+                >>> function | (o, Some l), log -> o, Optic.set optimization_ l log
+                             | (o, _), log -> o, log
 
-        let create<'c,'r,'s> (Translated (translated: Translation.GraphType<'c,'r,'s>)) configuration =
-                run configuration (translated, None)
-             |> fst
+            let create c =
+                    configure c
+                >>> optimize ()
+                >>> first Machine
 
-        let createLogged<'c,'r,'s> (Translated (translated: Translation.GraphType<'c,'r,'s>)) configuration =
-                run configuration (translated, Some MachineCreationLog.empty)
-             |> second Option.get
+        (* Functions *)
 
-        (* Execution *)
+        let create<'c,'r,'s> (Prototype.Prototype (t: Translation.Translated<'c,'r,'s>)) configuration =
+            Create.create configuration (t, None) |> fst
+
+        let createLogged<'c,'r,'s> (Prototype.Prototype (t: Translation.Translated<'c,'r,'s>)) configuration =
+            Create.create configuration (t, Some MachineCreationLog.empty) |> second Option.get
 
         let execute<'r,'s> (Machine (g: Optimization.Optimized<'r,'s>)) state =
             Execution.execute state g

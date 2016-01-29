@@ -139,7 +139,7 @@ let main _ =
 
     // Machine
 
-    let machine, machineLog = Machine.create prototype configuration (Some Machine.MachineCreationLog.empty)
+    let machine, machineLog = Machine.createLogged prototype configuration
 
     // Usage
 
