@@ -916,24 +916,26 @@ module Machines =
             static member translation_ =
                 (fun x -> x.Translation), (fun t x -> { x with Translation = t })
 
-        (* Optics *)
-
-        let private translation_ =
-                Option.value_
-            >?> PrototypeCreationLog.translation_
-
-        (* Patterns *)
-
-        let private (|Specification|) =
-            function { Specification = s } -> s
-
         (* Creation *)
 
         [<RequireQualifiedAccess>]
         module private Create =
 
+            (* Optics *)
+
+            let private translation_ =
+                    Option.value_
+                >?> PrototypeCreationLog.translation_
+
+            (* Patterns *)
+
+            let private specification =
+                    function { Specification = s } -> s
+
+            (* Functions *)
+
             let private translate _ =
-                    (|Specification|) *** Optic.get translation_ >>> Translation.translate () &&& snd
+                    specification*** Optic.get translation_ >>> Translation.translate () &&& snd
                 >>> function | (t, Some l), log -> t, Optic.set translation_ l log
                              | (t, _), log -> t, log
 
@@ -982,36 +984,38 @@ module Machines =
             static member optimization_ =
                 (fun x -> x.Optimization), (fun o x -> { x with Optimization = o })
 
-        (* Optics *)
-
-        let private configuration_ =
-                Option.value_
-            >?> MachineCreationLog.configuration_
-
-        let private optimization_ =
-                Option.value_
-            >?> MachineCreationLog.optimization_
-
-        (* Patterns *)
-
-        let private (|Translated|) =
-            function | Translation.Translated t -> t
-
-        let private (|Configured|) =
-            function | Configuration.Configured c -> c
-
         (* Creation *)
 
         [<RequireQualifiedAccess>]
         module private Create =
 
+            (* Optics *)
+
+            let private configuration_ =
+                    Option.value_
+                >?> MachineCreationLog.configuration_
+
+            let private optimization_ =
+                    Option.value_
+                >?> MachineCreationLog.optimization_
+
+            (* Patterns *)
+
+            let private translated =
+                    function | Translation.Translated t -> t
+
+            let private configured =
+                    function | Configuration.Configured c -> c
+
+            (* Functions *)
+
             let private configure c =
-                    (|Translated|) *** Optic.get configuration_ >>> Configuration.configure c &&& snd
+                    translated *** Optic.get configuration_ >>> Configuration.configure c &&& snd
                 >>> function | (c, Some l), log -> c, Optic.set configuration_ l log
                              | (c, _), log -> c, log
 
             let private optimize _ =
-                    (|Configured|) *** Optic.get optimization_ >>> Optimization.optimize () &&& snd
+                    configured *** Optic.get optimization_ >>> Optimization.optimize () &&& snd
                 >>> function | (o, Some l), log -> o, Optic.set optimization_ l log
                              | (o, _), log -> o, log
 
