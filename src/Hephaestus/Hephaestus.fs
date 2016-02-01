@@ -67,6 +67,9 @@ module internal Prelude =
    of the Hephaestus system (i.e. those designing and implementing Hephaestus
    components. *)
 
+type Key =
+    | Key of string list
+
 type Decision<'s> =
     | Function of ('s -> Async<DecisionValue * 's>)
     | Literal of DecisionValue
@@ -122,14 +125,14 @@ module Specifications =
                       | _ -> None), (Terminal)
 
      and SpecificationDecision<'c,'r,'s> =
-        string list * DecisionConfigurator<'c,'s> * Pair<Specification<'c,'r,'s>>
+        Key * DecisionConfigurator<'c,'s> * Pair<Specification<'c,'r,'s>>
 
      and SpecificationTerminal<'c,'r,'s> =
-        string list * TerminalConfigurator<'c,'r,'s>
+        Key * TerminalConfigurator<'c,'r,'s>
 
     type SpecificationOperation<'c,'r,'s> =
         | Prepend of Identity<Specification<'c,'r,'s>>
-        | Splice of string list * DecisionValue * Identity<Specification<'c,'r,'s>>
+        | Splice of Key * DecisionValue * Identity<Specification<'c,'r,'s>>
 
     (* Helpers *)
 
@@ -164,7 +167,7 @@ module Specifications =
 
             /// Create a new unnamed terminal with a no-op Hephaestus function.
             let empty<'c,'r,'s> =
-                Specification<'c,'r,'s>.Terminal ([], fun _ s -> async.Return (Unchecked.defaultof<'r>, s))
+                Specification<'c,'r,'s>.Terminal (Key [], fun _ s -> async.Return (Unchecked.defaultof<'r>, s))
 
         (* Decisions
 
@@ -209,8 +212,6 @@ module Specifications =
 
 [<AutoOpen>]
 module Models =
-
-    module S = Specifications
 
     (* Types
 
@@ -410,8 +411,8 @@ module Machines =
 
             (* Keys *)
 
-            let RootName =
-                [ "root" ]
+            let RootKey =
+                Key [ "root" ]
 
             (* Types *)
 
@@ -452,7 +453,7 @@ module Machines =
                     (fun (Translated x) -> x), (Translated)
 
              and GraphType<'c,'r,'s> =
-                Graph<string list,Node<'c,'r,'s>,Common.Edge>
+                Graph<Key,Node<'c,'r,'s>,Common.Edge>
 
              and Node<'c,'r,'s> =
                 | Node of Common.Node
@@ -476,8 +477,8 @@ module Machines =
                     (fun x -> x.Statistics), (fun s x -> { x with Log.Statistics = s })
 
              and Operation =
-                | DecisionTranslated of string list
-                | TerminalTranslated of string list
+                | DecisionTranslated of Key
+                | TerminalTranslated of Key
 
              and Statistics =
                 { Nodes: Nodes
@@ -577,8 +578,8 @@ module Machines =
             let private graph s =
                     nodes s
                 >>> edges s
-                >>> first (Graph.Nodes.add (Common.RootName, Node Common.Node))
-                >>> first (Graph.Edges.add (Common.RootName, (|SpecificationName|) s, Common.Undefined))
+                >>> first (Graph.Nodes.add (Common.RootKey, Node Common.Node))
+                >>> first (Graph.Edges.add (Common.RootKey, (|SpecificationName|) s, Common.Undefined))
 
             (* Translate *)
 
@@ -601,7 +602,7 @@ module Machines =
                     (fun (Configured x) -> x), (Configured)
 
              and GraphType<'r,'s> =
-                Graph<string list,Node<'r,'s>,Common.Edge>
+                Graph<Key,Node<'r,'s>,Common.Edge>
 
              and Node<'r,'s> =
                 | Node of Common.Node
@@ -623,8 +624,8 @@ module Machines =
                     (fun x -> x.Statistics), (fun s x -> { x with Log.Statistics = s })
 
              and Operation =
-                | DecisionConfigured of string list * Result
-                | TerminalConfigured of string list
+                | DecisionConfigured of Key * Result
+                | TerminalConfigured of Key
 
              and Result =
                 | LiteralConfigured of DecisionValue
@@ -751,7 +752,7 @@ module Machines =
                     (fun (Optimized x) -> x), (Optimized)
 
              and GraphType<'r,'s> =
-                Graph<string list, Node<'r,'s>,Common.Edge>
+                Graph<Key, Node<'r,'s>,Common.Edge>
 
              and Node<'r,'s> =
                 | Node of Common.Node
@@ -773,8 +774,8 @@ module Machines =
                     (fun x -> x.Statistics), (fun s x -> { x with Log.Statistics = s })
 
              and Operation =
-                | LiteralEliminated of string list
-                | SubgraphRootEliminated of string list
+                | LiteralEliminated of Key
+                | SubgraphRootEliminated of Key
 
              and Statistics =
                 { Literals: int
@@ -813,13 +814,13 @@ module Machines =
 
             (* Literal Node Elimination *)
 
-            let private outward<'r,'s> n v : Configuration.GraphType<'r,'s> -> string list =
+            let private outward<'r,'s> n v : Configuration.GraphType<'r,'s> -> Key =
                     Graph.Nodes.outward n
                  >> Option.get
                  >> List.pick (function | _, t, Common.Value v' when v = v' -> Some t
                                         | _ -> None)
 
-            let private inward<'r,'s> n t : Configuration.GraphType<'r,'s> -> LEdge<string list,Common.Edge> list =
+            let private inward<'r,'s> n t : Configuration.GraphType<'r,'s> -> LEdge<Key,Common.Edge> list =
                     Graph.Nodes.inward n
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
@@ -876,7 +877,7 @@ module Machines =
         [<RequireQualifiedAccess>]
         module Execution =
 
-            let private next<'r,'s> n e : Optimization.GraphType<'r,'s> -> string list =
+            let private next<'r,'s> n e : Optimization.GraphType<'r,'s> -> Key =
                     Graph.Nodes.successors n
                  >> Option.get
                  >> List.pick (function | n, e' when e = e' -> Some n
@@ -889,7 +890,7 @@ module Machines =
                 | _, Optimization.Terminal f -> f s
 
             let execute<'r,'s> state (Optimization.Optimized (g: Optimization.GraphType<'r,'s>)) =
-                eval Common.RootName state g
+                eval Common.RootKey state g
 
     (* Prototype
 
@@ -939,17 +940,17 @@ module Machines =
                 >>> function | (t, Some l), log -> t, Optic.set translation_ l log
                              | (t, _), log -> t, log
 
-            let create _ =
+            let prototype _ =
                     translate ()
                 >>> first Prototype
 
         (* Functions *)
 
         let create<'c,'r,'s> (model: Model<'c,'r,'s>) =
-            Create.create () (model, None) |> fst
+            Create.prototype () (model, None) |> fst
 
         let createLogged<'c,'r,'s> (model: Model<'c,'r,'s>) =
-            Create.create () (model, Some PrototypeCreationLog.empty) |> second Option.get
+            Create.prototype () (model, Some PrototypeCreationLog.empty) |> second Option.get
 
     (* Machine
 
@@ -1019,7 +1020,7 @@ module Machines =
                 >>> function | (o, Some l), log -> o, Optic.set optimization_ l log
                              | (o, _), log -> o, log
 
-            let create c =
+            let machine c =
                     configure c
                 >>> optimize ()
                 >>> first Machine
@@ -1027,10 +1028,10 @@ module Machines =
         (* Functions *)
 
         let create<'c,'r,'s> (Prototype.Prototype (t: Translation.Translated<'c,'r,'s>)) configuration =
-            Create.create configuration (t, None) |> fst
+            Create.machine configuration (t, None) |> fst
 
         let createLogged<'c,'r,'s> (Prototype.Prototype (t: Translation.Translated<'c,'r,'s>)) configuration =
-            Create.create configuration (t, Some MachineCreationLog.empty) |> second Option.get
+            Create.machine configuration (t, Some MachineCreationLog.empty) |> second Option.get
 
         let execute<'r,'s> (Machine (g: Optimization.Optimized<'r,'s>)) state =
             Execution.execute state g

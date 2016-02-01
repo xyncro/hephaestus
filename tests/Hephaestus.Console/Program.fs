@@ -40,7 +40,7 @@ module HttpCore =
     (* Decisions *)
 
     let private decision name =
-        Specification.Decision.create [ Name; Decision; name ]
+        Specification.Decision.create (Key [ Name; Decision; name ])
 
     let private serviceAvailable =
         decision "service.available" (fun configuration ->
@@ -57,7 +57,7 @@ module HttpCore =
     (* Responses *)
 
     let private response name =
-        response [ Name; Response; name ]
+        response (Key [ Name; Response; name ])
 
     (* Composition *)
 
@@ -87,7 +87,7 @@ module HttpOptions =
     (* Decisions *)
 
     let private decision name =
-        Specification.Decision.create [ Name; Decision; name ]
+        Specification.Decision.create (Key [ Name; Decision; name ])
 
     let private methodOptions =
         decision "method.options" (fun _ ->
@@ -100,7 +100,7 @@ module HttpOptions =
     (* Responses *)
 
     let private response name =
-        response [ Name; Response; name ]
+        response (Key [ Name; Response; name ])
 
     (* Composition *)
 
@@ -117,7 +117,7 @@ module HttpOptions =
             { Required = set [ HttpCore.Name ]
               Preconditions = [] }
           Operations =
-            [ Splice ([ HttpCore.Name; Decision; "service.available" ], Right, httpOptions) ] }
+            [ Splice (Key [ HttpCore.Name; Decision; "service.available" ], Right, httpOptions) ] }
 
 (* Main *)
 
