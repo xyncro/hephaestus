@@ -528,11 +528,11 @@ module Machines =
                 >-> Statistics.edges_
 
             let private decisionTranslated k =
-                    Common.log operations_ (fun os -> os @ [ DecisionTranslated k ])
+                    Common.log operations_ (List.append [ DecisionTranslated k ])
                  >> Common.log decisions_ Common.increment
 
             let private terminalTranslated k =
-                    Common.log operations_ (fun os -> os @ [ TerminalTranslated k ])
+                    Common.log operations_ (List.append [ TerminalTranslated k ])
                  >> Common.log terminals_ Common.increment
 
             let private edgeTranslated =
@@ -688,15 +688,15 @@ module Machines =
             (* Functions *)
 
             let private literalConfigured k l =
-                    Common.log operations_ (fun os -> os @ [ DecisionConfigured (k, LiteralConfigured l) ])
+                    Common.log operations_ (List.append [ DecisionConfigured (k, LiteralConfigured l) ])
                  >> Common.log literals_ Common.increment
 
             let private functionConfigured k =
-                    Common.log operations_ (fun os -> os @ [ DecisionConfigured (k, FunctionConfigured) ])
+                    Common.log operations_ (List.append [ DecisionConfigured (k, FunctionConfigured) ])
                  >> Common.log functions_ Common.increment
 
             let private terminalConfigured k =
-                    Common.log operations_ (fun os -> os @ [ TerminalConfigured (k) ])
+                    Common.log operations_ (List.append [ TerminalConfigured (k) ])
                  >> Common.log terminals_ Common.increment
 
             (* Configuration
@@ -775,18 +775,24 @@ module Machines =
 
              and Operation =
                 | LiteralEliminated of Key
+                | DuplicatingEliminated of Key
                 | SubgraphRootEliminated of Key
 
              and Statistics =
                 { Literals: int
+                  Duplicating: int
                   SubgraphRoots: int }
 
                 static member empty =
                     { Literals = 0
+                      Duplicating = 0
                       SubgraphRoots = 0 }
 
                 static member literals_ =
                     (fun x -> x.Literals), (fun l x -> { x with Statistics.Literals = l })
+
+                static member duplicating_ =
+                    (fun x -> x.Duplicating), (fun d x -> { x with Statistics.Duplicating = d })
 
                 static member subgraphRoots_ =
                     (fun x -> x.SubgraphRoots), (fun s x -> { x with Statistics.SubgraphRoots = s })
@@ -800,19 +806,27 @@ module Machines =
                     Log.statistics_
                 >-> Statistics.literals_
 
+            let private duplicating_ =
+                    Log.statistics_
+                >-> Statistics.literals_
+
             let private subgraphRoots_ =
                     Log.statistics_
                 >-> Statistics.subgraphRoots_
 
             let private eliminatedLiteral k =
-                    Common.log operations_ (fun os -> LiteralEliminated k :: os)
+                    Common.log operations_ (List.append [ LiteralEliminated k ])
                  >> Common.log literals_ Common.increment
 
+            let private eliminatedDuplicating k =
+                    Common.log operations_ (List.append [ DuplicatingEliminated k ])
+                 >> Common.log duplicating_ Common.increment
+
             let private eliminatedSubgraphRoot k =
-                    Common.log operations_ (fun os -> SubgraphRootEliminated k :: os)
+                    Common.log operations_ (List.append [ SubgraphRootEliminated k ])
                  >> Common.log subgraphRoots_ Common.increment
 
-            (* Literal Node Elimination *)
+            (* Common Operations *)
 
             let private outward<'r,'s> n v : Configuration.GraphType<'r,'s> -> Key =
                     Graph.Nodes.outward n
@@ -825,9 +839,15 @@ module Machines =
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
 
+            let private reconnect n v =
+                    ((outward n v &&& id) >>> uncurry (inward n)) &&& id >>> uncurry Graph.Edges.addMany
+                >>> Graph.Nodes.remove n
+
+            (* Literal Node Elimination *)
+
             let rec private eliminateLiterals (graph: Configuration.GraphType<'r,'s>, l) =
                 match findLiteral graph with
-                | Some (n, v) -> eliminateLiterals (bypassLiteral n v graph, eliminatedLiteral n l)
+                | Some (n, v) -> eliminateLiterals (reconnect n v graph, eliminatedLiteral n l)
                 | _ -> graph, l
 
             and private findLiteral (graph: Configuration.GraphType<'r,'s>) =
@@ -835,9 +855,19 @@ module Machines =
                 |> List.tryPick (function | n, Configuration.Decision (Literal v) -> Some (n, v)
                                           | _ -> None)
 
-            and private bypassLiteral n v =
-                    ((outward n v &&& id) >>> uncurry (inward n)) &&& id >>> uncurry Graph.Edges.addMany
-                >>> Graph.Nodes.remove n
+            (* Duplicating Node Elimination *)
+
+            let rec private eliminateDuplicating (graph: Configuration.GraphType<'r,'s>, l) =
+                match findDuplicating graph with
+                | Some n -> eliminateDuplicating (reconnect n Right graph, eliminatedDuplicating n l)
+                | _ -> graph, l
+
+            and private findDuplicating (graph: Configuration.GraphType<'r,'s>) =
+                Graph.Nodes.toList graph
+                |> List.tryPick (fun (key, _) ->
+                    match Graph.Nodes.outward key graph with
+                    | Some ((_, e1, _) :: [ (_, e2, _) ]) when e1 = e2 -> Some key
+                    | _ -> None)
 
             (* Subgraph Elimination *)
 
@@ -848,7 +878,8 @@ module Machines =
 
             and private findSubgraph (graph: Configuration.GraphType<'r,'s>) =
                 Graph.Nodes.toList graph
-                |> List.tryPick (function | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
+                |> List.tryPick (function | n, _ when n = Common.RootKey -> None
+                                          | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
                                           | _ -> None)
 
             (* Node Conversion *)
@@ -865,6 +896,7 @@ module Machines =
             let private graph g =
                     tuple g
                  >> eliminateLiterals
+                 >> eliminateDuplicating
                  >> eliminateSubgraphs
 
             let internal optimize _ =
