@@ -968,7 +968,7 @@ module Machines =
             (* Functions *)
 
             let private translate _ =
-                    specification*** Optic.get translation_ >>> Translation.translate () &&& snd
+                    specification *** Optic.get translation_ >>> Translation.translate () &&& snd
                 >>> function | (t, Some l), log -> t, Optic.set translation_ l log
                              | (t, _), log -> t, log
 
