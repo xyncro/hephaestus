@@ -70,6 +70,12 @@ module internal Prelude =
 type Key =
     | Key of string list
 
+    static member key_ =
+        (fun (Key x) -> x), (Key)
+
+    static member empty =
+        Key []
+
 type Decision<'s> =
     | Function of ('s -> Async<DecisionValue * 's>)
     | Literal of DecisionValue
