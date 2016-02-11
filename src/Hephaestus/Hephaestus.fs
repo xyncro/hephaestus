@@ -781,24 +781,24 @@ module Machines =
 
              and Operation =
                 | LiteralEliminated of Key
-                | DuplicatingEliminated of Key
+                | DirectEliminated of Key
                 | SubgraphRootEliminated of Key
 
              and Statistics =
                 { Literals: int
-                  Duplicating: int
+                  Direct: int
                   SubgraphRoots: int }
 
                 static member empty =
                     { Literals = 0
-                      Duplicating = 0
+                      Direct = 0
                       SubgraphRoots = 0 }
 
                 static member literals_ =
                     (fun x -> x.Literals), (fun l x -> { x with Statistics.Literals = l })
 
-                static member duplicating_ =
-                    (fun x -> x.Duplicating), (fun d x -> { x with Statistics.Duplicating = d })
+                static member direct_ =
+                    (fun x -> x.Direct), (fun d x -> { x with Statistics.Direct = d })
 
                 static member subgraphRoots_ =
                     (fun x -> x.SubgraphRoots), (fun s x -> { x with Statistics.SubgraphRoots = s })
@@ -812,9 +812,9 @@ module Machines =
                     Log.statistics_
                 >-> Statistics.literals_
 
-            let private duplicating_ =
+            let private direct_ =
                     Log.statistics_
-                >-> Statistics.literals_
+                >-> Statistics.direct_
 
             let private subgraphRoots_ =
                     Log.statistics_
@@ -824,9 +824,9 @@ module Machines =
                     Common.log operations_ (List.append [ LiteralEliminated k ])
                  >> Common.log literals_ Common.increment
 
-            let private eliminatedDuplicating k =
-                    Common.log operations_ (List.append [ DuplicatingEliminated k ])
-                 >> Common.log duplicating_ Common.increment
+            let private eliminatedDirect k =
+                    Common.log operations_ (List.append [ DirectEliminated k ])
+                 >> Common.log direct_ Common.increment
 
             let private eliminatedSubgraphRoot k =
                     Common.log operations_ (List.append [ SubgraphRootEliminated k ])
@@ -861,18 +861,18 @@ module Machines =
                 |> List.tryPick (function | n, Configuration.Decision (Literal v) -> Some (n, v)
                                           | _ -> None)
 
-            (* Duplicating Node Elimination *)
+            (* Direct Node Elimination *)
 
-            let rec private eliminateDuplicating (graph: Configuration.GraphType<'r,'s>, l) =
-                match findDuplicating graph with
-                | Some n -> eliminateDuplicating (reconnect n Right graph, eliminatedDuplicating n l)
+            let rec private eliminateDirect (graph: Configuration.GraphType<'r,'s>, l) =
+                match findDirect graph with
+                | Some n -> eliminateDirect (reconnect n Right graph, eliminatedDirect n l)
                 | _ -> graph, l
 
-            and private findDuplicating (graph: Configuration.GraphType<'r,'s>) =
+            and private findDirect (graph: Configuration.GraphType<'r,'s>) =
                 Graph.Nodes.toList graph
                 |> List.tryPick (fun (key, _) ->
                     match Graph.Nodes.outward key graph with
-                    | Some ((_, e1, _) :: [ (_, e2, _) ]) when e1 = e2 -> Some key
+                    | Some ([ _ ]) when key <> Common.RootKey -> Some key
                     | _ -> None)
 
             (* Subgraph Elimination *)
@@ -902,7 +902,7 @@ module Machines =
             let private graph g =
                     tuple g
                  >> eliminateLiterals
-                 >> eliminateDuplicating
+                 >> eliminateDirect
                  >> eliminateSubgraphs
 
             let internal optimize _ =
