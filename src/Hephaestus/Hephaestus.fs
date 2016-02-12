@@ -865,14 +865,14 @@ module Machines =
 
             let rec private eliminateDirect (graph: Configuration.GraphType<'r,'s>, l) =
                 match findDirect graph with
-                | Some n -> eliminateDirect (reconnect n Right graph, eliminatedDirect n l)
+                | Some (n, v) -> eliminateDirect (reconnect n v graph, eliminatedDirect n l)
                 | _ -> graph, l
 
             and private findDirect (graph: Configuration.GraphType<'r,'s>) =
                 Graph.Nodes.toList graph
                 |> List.tryPick (fun (key, _) ->
                     match Graph.Nodes.outward key graph with
-                    | Some ([ _ ]) when key <> Common.RootKey -> Some key
+                    | Some ([ (_, _, Common.Value v) ]) when key <> Common.RootKey -> Some (key, v)
                     | _ -> None)
 
             (* Subgraph Elimination *)
