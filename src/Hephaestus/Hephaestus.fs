@@ -429,6 +429,31 @@ module Machines =
                 | Undefined
                 | Value of DecisionValue
 
+        (* Logging *)
+
+        [<RequireQualifiedAccess>]
+        module Log =
+
+            (* Types *)
+
+            type Graph<'a> =
+                | Graph of Nodes<'a> * Edges
+
+                static member nodes_ =
+                    (fun (Graph (n, _)) -> n), (fun n (Graph (_, e)) -> Graph (n, e))
+
+                static member edges_ =
+                    (fun (Graph (_, e)) -> e), (fun e (Graph (n, _)) -> Graph (n, e))
+
+                static member empty =
+                    Graph ([], [])
+
+             and Nodes<'a> =
+                (Key * 'a) list
+
+             and Edges =
+                (Key * Key * DecisionValue option) list
+
             (* Functions *)
 
             let inline log l f =
@@ -470,17 +495,22 @@ module Machines =
 
             type Log =
                 { Operations: Operation list
-                  Statistics: Statistics }
+                  Statistics: Statistics
+                  Graphs: Graphs }
 
                 static member empty =
                     { Operations = List.empty
-                      Statistics = Statistics.empty }
+                      Statistics = Statistics.empty
+                      Graphs = Graphs.empty }
 
                 static member operations_ =
                     (fun x -> x.Operations), (fun o x -> { x with Log.Operations = o })
 
                 static member statistics_ =
                     (fun x -> x.Statistics), (fun s x -> { x with Log.Statistics = s })
+
+                static member graphs_ =
+                    (fun x -> x.Graphs), (fun g x -> { x with Log.Graphs = g })
 
              and Operation =
                 | DecisionTranslated of Key
@@ -514,6 +544,15 @@ module Machines =
                 static member terminals_ =
                     (fun x -> x.Terminals), (fun t x -> { x with Terminals = t })
 
+             and Graphs =
+                { Post: Log.Graph<unit> }
+
+                static member post_ =
+                    (fun x -> x.Post), (fun p x -> { x with Post = p })
+
+                static member empty =
+                    { Post = Log.Graph ([], []) }
+
             (* Logging *)
 
             let private operations_ =
@@ -533,16 +572,23 @@ module Machines =
                     Log.statistics_
                 >-> Statistics.edges_
 
+            let private post_ =
+                    Log.graphs_
+                >-> Graphs.post_
+
             let private decisionTranslated k =
-                    Common.log operations_ (List.append [ DecisionTranslated k ])
-                 >> Common.log decisions_ Common.increment
+                    Log.log operations_ (List.append [ DecisionTranslated k ])
+                 >> Log.log decisions_ Log.increment
 
             let private terminalTranslated k =
-                    Common.log operations_ (List.append [ TerminalTranslated k ])
-                 >> Common.log terminals_ Common.increment
+                    Log.log operations_ (List.append [ TerminalTranslated k ])
+                 >> Log.log terminals_ Log.increment
 
             let private edgeTranslated =
-                    Common.log edges_ Common.increment
+                    Log.log edges_ Log.increment
+
+            let private post graph =
+                    Log.log post_ (fun _ -> graph)
 
             (* Translation
 
@@ -587,11 +633,25 @@ module Machines =
                 >>> first (Graph.Nodes.add (Common.RootKey, Node Common.Node))
                 >>> first (Graph.Edges.add (Common.RootKey, (|SpecificationName|) s, Common.Undefined))
 
+            (* Log *)
+
+            let private logPost (g, l) =
+                g, post (
+                    Log.Graph (
+                        Graph.Nodes.toList g
+                        |> List.map (
+                            function | (key, _) -> key, ()),
+                        Graph.Edges.toList g
+                        |> List.map (
+                            function | (k1, k2, Common.Value v) -> k1, k2, Some v
+                                     | (k1, k2, _) -> k1, k2, None))) l
+
             (* Translate *)
 
             let internal translate _ =
                     id *** tuple Graph.empty
                 >>> uncurry graph
+                >>> logPost
                 >>> first Translated
 
         (* Configuration *)
@@ -617,17 +677,22 @@ module Machines =
 
             type Log =
                 { Operations: Operation list
-                  Statistics: Statistics }
+                  Statistics: Statistics
+                  Graphs: Graphs }
 
                 static member empty =
                     { Operations = List.empty
-                      Statistics = Statistics.empty }
+                      Statistics = Statistics.empty
+                      Graphs = Graphs.empty }
 
                 static member operations_ =
                     (fun x -> x.Operations), (fun o x -> { x with Log.Operations = o })
 
                 static member statistics_ =
                     (fun x -> x.Statistics), (fun s x -> { x with Log.Statistics = s })
+
+                static member graphs_ =
+                    (fun x -> x.Graphs), (fun g x -> { x with Log.Graphs = g })
 
              and Operation =
                 | DecisionConfigured of Key * Result
@@ -665,6 +730,19 @@ module Machines =
                 static member literals_ =
                     (fun x -> x.Literals), (fun l x -> { x with Literals = l })
 
+             and Graphs =
+                { Post: Log.Graph<Node option> }
+
+                static member post_ =
+                    (fun x -> x.Post), (fun p x -> { x with Post = p })
+
+                static member empty =
+                    { Post = Log.Graph ([], []) }
+
+             and Node =
+                | LiteralNode of DecisionValue
+                | FunctionNode
+
             (* Logging
 
                Types and functions for generating logs of configuration during
@@ -691,19 +769,26 @@ module Machines =
                     Log.statistics_
                 >-> Statistics.terminals_
 
+            let private post_ =
+                    Log.graphs_
+                >-> Graphs.post_
+
             (* Functions *)
 
             let private literalConfigured k l =
-                    Common.log operations_ (List.append [ DecisionConfigured (k, LiteralConfigured l) ])
-                 >> Common.log literals_ Common.increment
+                    Log.log operations_ (List.append [ DecisionConfigured (k, LiteralConfigured l) ])
+                 >> Log.log literals_ Log.increment
 
             let private functionConfigured k =
-                    Common.log operations_ (List.append [ DecisionConfigured (k, FunctionConfigured) ])
-                 >> Common.log functions_ Common.increment
+                    Log.log operations_ (List.append [ DecisionConfigured (k, FunctionConfigured) ])
+                 >> Log.log functions_ Log.increment
 
             let private terminalConfigured k =
-                    Common.log operations_ (List.append [ TerminalConfigured (k) ])
-                 >> Common.log terminals_ Common.increment
+                    Log.log operations_ (List.append [ TerminalConfigured (k) ])
+                 >> Log.log terminals_ Log.increment
+
+            let private post graph =
+                    Log.log post_ (fun _ -> graph)
 
             (* Configuration
 
@@ -733,10 +818,26 @@ module Machines =
                     uncurry (flip (Graph.Nodes.mapFold (nodes c)))
                  >> swap
 
+            (* Log *)
+
+            let private logPost (g, l) =
+                g, post (
+                    Log.Graph (
+                        Graph.Nodes.toList g
+                        |> List.map (
+                            function | (key, Decision (Literal l)) -> key, Some (LiteralNode l)
+                                     | (key, Decision (Function _)) -> key, Some (FunctionNode)
+                                     | (key, _) -> key, None),
+                        Graph.Edges.toList g
+                        |> List.map (
+                            function | (k1, k2, Common.Value v) -> k1, k2, Some v
+                                     | (k1, k2, _) -> k1, k2, None))) l
+
             (* Configure *)
 
             let internal configure c =
                     graph c
+                >>> logPost
                 >>> first Configured
 
         (* Optimization *)
@@ -767,17 +868,22 @@ module Machines =
 
             type Log =
                 { Operations: Operation list
-                  Statistics: Statistics }
+                  Statistics: Statistics
+                  Graphs: Graphs }
 
                 static member empty =
                      { Operations = List.empty
-                       Statistics = Statistics.empty }
+                       Statistics = Statistics.empty
+                       Graphs = Graphs.empty }
 
                 static member operations_ =
                     (fun x -> x.Operations), (fun o x -> { x with Log.Operations = o })
 
                 static member statistics_ =
                     (fun x -> x.Statistics), (fun s x -> { x with Log.Statistics = s })
+
+                static member graphs_ =
+                    (fun x -> x.Graphs), (fun g x -> { x with Graphs = g })
 
              and Operation =
                 | LiteralEliminated of Key
@@ -803,6 +909,15 @@ module Machines =
                 static member subgraphRoots_ =
                     (fun x -> x.SubgraphRoots), (fun s x -> { x with Statistics.SubgraphRoots = s })
 
+             and Graphs =
+                { Post: Log.Graph<unit> }
+
+                static member post_ =
+                    (fun x -> x.Post), (fun p x -> { x with Post = p })
+
+                static member empty =
+                    { Post = Log.Graph ([], []) }
+
             (* Logging *)
 
             let private operations_ =
@@ -820,17 +935,24 @@ module Machines =
                     Log.statistics_
                 >-> Statistics.subgraphRoots_
 
+            let private post_ =
+                    Log.graphs_
+                >-> Graphs.post_
+
             let private eliminatedLiteral k =
-                    Common.log operations_ (List.append [ LiteralEliminated k ])
-                 >> Common.log literals_ Common.increment
+                    Log.log operations_ (List.append [ LiteralEliminated k ])
+                 >> Log.log literals_ Log.increment
 
             let private eliminatedDirect k =
-                    Common.log operations_ (List.append [ DirectEliminated k ])
-                 >> Common.log direct_ Common.increment
+                    Log.log operations_ (List.append [ DirectEliminated k ])
+                 >> Log.log direct_ Log.increment
 
             let private eliminatedSubgraphRoot k =
-                    Common.log operations_ (List.append [ SubgraphRootEliminated k ])
-                 >> Common.log subgraphRoots_ Common.increment
+                    Log.log operations_ (List.append [ SubgraphRootEliminated k ])
+                 >> Log.log subgraphRoots_ Log.increment
+
+            let private post graph =
+                    Log.log post_ (fun _ -> graph)
 
             (* Common Operations *)
 
@@ -897,6 +1019,19 @@ module Machines =
                              | Configuration.Terminal (f) -> Terminal f
                              | _ -> failwith "Unexpected Node during Optimization.")
 
+            (* Log *)
+
+            let private logPost (g, l) =
+                g, post (
+                    Log.Graph (
+                        Graph.Nodes.toList g
+                        |> List.map (
+                            function | (key, _) -> key, ()),
+                        Graph.Edges.toList g
+                        |> List.map (
+                            function | (k1, k2, Common.Value v) -> k1, k2, Some v
+                                     | (k1, k2, _) -> k1, k2, None))) l
+
             (* Optimization *)
 
             let private graph g =
@@ -908,6 +1043,7 @@ module Machines =
             let internal optimize _ =
                     uncurry graph
                 >>> first convert
+                >>> logPost
                 >>> first Optimized
 
         (* Execution *)
