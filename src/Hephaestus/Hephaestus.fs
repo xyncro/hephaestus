@@ -5,7 +5,6 @@ open Aether
 open Aether.Operators
 open Anat
 open Anat.Operators
-open Hekate
 
 // TODO: Pre/post-condition analysis
 // TODO: Logging/Introspection mechanisms (to be completed for execution - async)
@@ -19,12 +18,21 @@ open Hekate
    - 'r for the type of result
    - 's for the type of State *)
 
+(* Aliases
+
+   Rather than opening Hekate at the root, we open sub-modules explicitly as
+   aliases, to avoid clashing with our Graph type later on. *)
+
+module Graph = Hekate.Graph
+module Edges = Hekate.Graph.Edges
+module Nodes = Hekate.Graph.Nodes
+
 (* Prelude *)
 
 [<AutoOpen>]
 module internal Prelude =
 
-    type Identity<'a> =
+    type Homomorphism<'a> =
         'a -> 'a
 
     type Pair<'a> =
@@ -92,12 +100,6 @@ type Decision<'s> =
     | Right
     | Left
 
-type DecisionConfigurator<'c,'s> =
-    'c -> Decision<'s>
-
-type TerminalConfigurator<'c,'r,'s> =
-    'c -> 's -> Async<'r * 's>
-
 (* Specifications
 
    The Hephaestus Specification model, a highly restricted abstraction of the
@@ -119,26 +121,20 @@ module Specifications =
        optimized, etc. *)
 
     type Specification<'c,'r,'s> =
-        | Decision of SpecificationDecision<'c,'r,'s>
-        | Terminal of SpecificationTerminal<'c,'r,'s>
+        | Decision of Key * ('c -> Decision<'s>) * Pair<Specification<'c,'r,'s>>
+        | Terminal of Key * ('c -> 's -> Async<'r * 's>)
 
-        static member decision_ : Epimorphism<Specification<'c,'r,'s>,SpecificationDecision<'c,'r,'s>> =
-            (function | Decision d -> Some d
+        static member decision_ =
+            (function | Decision (k, c, s) -> Some (k, c, s)
                       | _ -> None), (Decision)
 
-        static member terminal_ : Epimorphism<Specification<'c,'r,'s>,SpecificationTerminal<'c,'r,'s>> =
-            (function | Terminal t -> Some t
+        static member terminal_ =
+            (function | Terminal (k, c) -> Some (k, c)
                       | _ -> None), (Terminal)
 
-     and SpecificationDecision<'c,'r,'s> =
-        Key * DecisionConfigurator<'c,'s> * Pair<Specification<'c,'r,'s>>
-
-     and SpecificationTerminal<'c,'r,'s> =
-        Key * TerminalConfigurator<'c,'r,'s>
-
     type SpecificationOperation<'c,'r,'s> =
-        | Prepend of Identity<Specification<'c,'r,'s>>
-        | Splice of Key * DecisionValue * Identity<Specification<'c,'r,'s>>
+        | Prepend of Homomorphism<Specification<'c,'r,'s>>
+        | Splice of Key * DecisionValue * Homomorphism<Specification<'c,'r,'s>>
 
     (* Helpers *)
 
@@ -343,13 +339,13 @@ module Models =
     [<RequireQualifiedAccess>]
     module internal Operation =
 
-        let private prepend<'c,'r,'s> (f: Identity<Specification<'c,'r,'s>>) specification =
+        let private prepend<'c,'r,'s> (f: Homomorphism<Specification<'c,'r,'s>>) specification =
             f specification
 
         // TODO: Test and fix this in the case of cyclic specifications
         // TODO: Test and fix this in the case of duplicate specification names
 
-        let rec private splice<'c,'r,'s> name value (f: Identity<Specification<'c,'r,'s>>) specification =
+        let rec private splice<'c,'r,'s> name value (f: Homomorphism<Specification<'c,'r,'s>>) specification =
             match specification with
             | Decision (n, c, (l, r)) when n = name && value = Left -> Decision (n, c, (f l, r))
             | Decision (n, c, (l, r)) when n = name && value = Right -> Decision (n, c, (l, f r))
@@ -410,24 +406,37 @@ module Machines =
     [<AutoOpen>]
     module Graphs =
 
-        (* Common *)
+        (* Types *)
 
-        [<RequireQualifiedAccess>]
-        module Common =
+        type Graph<'c,'r,'s> =
+            | Graph of Hekate.Graph<Key,Node<'c,'r,'s>,Edge>
 
-            (* Keys *)
+         and Node<'c,'r,'s> =
+            | Node
+            | Constructed of Constructed<'c,'r,'s>
+            | Configured of Configured<'r,'s>
+            | Optimized of Optimized<'r,'s>
 
-            let RootKey =
-                Key [ "root" ]
+         and Constructed<'c,'r,'s> =
+            | Decision of ('c -> Decision<'s>)
+            | Terminal of ('c -> 's -> Async<'r * 's>)
 
-            (* Types *)
+         and Configured<'r,'s> =
+            | Decision of Decision<'s>
+            | Terminal of ('s -> Async<'r * 's>)
 
-            type Node =
-                | Node
+         and Optimized<'r,'s> =
+            | Decision of ('s -> Async<DecisionValue * 's>)
+            | Terminal of ('s -> Async<'r * 's>)
 
-             and Edge =
-                | Undefined
-                | Value of DecisionValue
+         and Edge =
+            | Undefined
+            | Value of DecisionValue
+
+        (* Keys *)
+
+        let RootKey =
+            Key [ "root" ]
 
         (* Logging *)
 
@@ -462,34 +471,18 @@ module Machines =
             let internal increment =
                 fun x -> x + 1
 
-        (* Translation
+        (* Construction
 
-            A translated graph, parameterized by state type, and by the type
-            of the configuration data which will be passed to translation
+            A constructed graph, parameterized by state type, and by the type
+            of the configuration data which will be passed to construction
             decisions to effectively reify to a Hephaestus Decision.
 
-            Translated graphs are the result of the translation from the
+            Constructed graphs are the result of the translation from the
             Hephaestus Specification model to a phase of the pipeline to produce
             an executable graph model. *)
 
         [<RequireQualifiedAccess>]
-        module Translation =
-
-            (* Types *)
-
-            type Translated<'c,'r,'s> =
-                | Translated of GraphType<'c,'r,'s>
-
-                static member translated_ : Isomorphism<Translated<'c,'r,'s>,GraphType<'c,'r,'s>> =
-                    (fun (Translated x) -> x), (Translated)
-
-             and GraphType<'c,'r,'s> =
-                Graph<Key,Node<'c,'r,'s>,Common.Edge>
-
-             and Node<'c,'r,'s> =
-                | Node of Common.Node
-                | Decision of DecisionConfigurator<'c,'s>
-                | Terminal of TerminalConfigurator<'c,'r,'s>
+        module Construction =
 
             (* Log *)
 
@@ -590,9 +583,9 @@ module Machines =
             let private post graph =
                     Log.log post_ (fun _ -> graph)
 
-            (* Translation
+            (* Construction
 
-               Functions for translating a Hephaestus Specification to a graph based
+               Functions for constructing a Hephaestus Specification to a graph based
                representation of the equivalent (unmodified) decision graph, prior
                to applying instance specific configuration to the graph. *)
 
@@ -605,10 +598,10 @@ module Machines =
             and private decision n c l r =
                     nodes l
                 >>> nodes r
-                >>> Graph.Nodes.add (n, Decision c) *** decisionTranslated n
+                >>> Graph.Nodes.add (n, Constructed (Constructed.Decision c)) *** decisionTranslated n
 
             and private terminal n c =
-                    Graph.Nodes.add (n, Terminal c) *** terminalTranslated n
+                    Graph.Nodes.add (n, Constructed (Constructed.Terminal c)) *** terminalTranslated n
 
             (* Edges *)
 
@@ -619,8 +612,8 @@ module Machines =
             and private edge n l r =
                     edges l
                 >>> edges r
-                >>> Graph.Edges.add (n, (|SpecificationName|) l, Common.Value Left) *** edgeTranslated
-                >>> Graph.Edges.add (n, (|SpecificationName|) r, Common.Value Right) *** edgeTranslated
+                >>> Graph.Edges.add (n, (|SpecificationName|) l, Value Left) *** edgeTranslated
+                >>> Graph.Edges.add (n, (|SpecificationName|) r, Value Right) *** edgeTranslated
 
             (* Graph *)
 
@@ -630,8 +623,8 @@ module Machines =
             let private graph s =
                     nodes s
                 >>> edges s
-                >>> first (Graph.Nodes.add (Common.RootKey, Node Common.Node))
-                >>> first (Graph.Edges.add (Common.RootKey, (|SpecificationName|) s, Common.Undefined))
+                >>> first (Graph.Nodes.add (RootKey, Node))
+                >>> first (Graph.Edges.add (RootKey, (|SpecificationName|) s, Undefined))
 
             (* Log *)
 
@@ -643,37 +636,23 @@ module Machines =
                             function | (key, _) -> key, ()),
                         Graph.Edges.toList g
                         |> List.map (
-                            function | (k1, k2, Common.Value v) -> k1, k2, Some v
+                            function | (k1, k2, Value v) -> k1, k2, Some v
                                      | (k1, k2, _) -> k1, k2, None))) l
 
-            (* Translate *)
+            (* Construct *)
 
-            let internal translate _ =
+            let internal construct _ =
                     id *** tuple Graph.empty
                 >>> uncurry graph
                 >>> logPost
-                >>> first Translated
+                >>> first Graph
 
         (* Configuration *)
 
         [<RequireQualifiedAccess>]
         module Configuration =
 
-            (* Types *)
-
-            type Configured<'r,'s> =
-                | Configured of GraphType<'r,'s>
-
-                static member graph_ : Isomorphism<Configured<'r,'s>,GraphType<'r,'s>> =
-                    (fun (Configured x) -> x), (Configured)
-
-             and GraphType<'r,'s> =
-                Graph<Key,Node<'r,'s>,Common.Edge>
-
-             and Node<'r,'s> =
-                | Node of Common.Node
-                | Decision of Decision<'s>
-                | Terminal of ('s -> Async<'r * 's>)
+            (* Log *)
 
             type Log =
                 { Operations: Operation list
@@ -799,20 +778,17 @@ module Machines =
 
             (* Functions *)
 
-            let private node l =
-                function | Common.Node -> Node (Common.Node), l
-
             let private decision l k =
-                function | Literal v -> Decision (Literal v), literalConfigured k v l
-                         | Function f -> Decision (Function f), functionConfigured k l
+                function | Literal v -> Configured (Configured.Decision (Literal v)), literalConfigured k v l
+                         | Function f -> Configured (Configured.Decision (Function f)), functionConfigured k l
 
             let private terminal l k =
-                function | f -> Terminal f, terminalConfigured k l
+                function | f -> Configured (Configured.Terminal f), terminalConfigured k l
 
             let private nodes c l k =
-                function | Translation.Node n -> node l n
-                         | Translation.Decision f -> decision l k (f c)
-                         | Translation.Terminal f -> terminal l k (f c)
+                function | Constructed (Constructed.Decision f) -> decision l k (f c)
+                         | Constructed (Constructed.Terminal f) -> terminal l k (f c)
+                         | n -> n, l
 
             let private graph c =
                     uncurry (flip (Graph.Nodes.mapFold (nodes c)))
@@ -825,12 +801,12 @@ module Machines =
                     Log.Graph (
                         Graph.Nodes.toList g
                         |> List.map (
-                            function | (key, Decision (Literal l)) -> key, Some (LiteralNode l)
-                                     | (key, Decision (Function _)) -> key, Some (FunctionNode)
+                            function | (key, Configured (Configured.Decision (Literal l))) -> key, Some (LiteralNode l)
+                                     | (key, Configured (Configured.Decision (Function _))) -> key, Some (FunctionNode)
                                      | (key, _) -> key, None),
                         Graph.Edges.toList g
                         |> List.map (
-                            function | (k1, k2, Common.Value v) -> k1, k2, Some v
+                            function | (k1, k2, Value v) -> k1, k2, Some v
                                      | (k1, k2, _) -> k1, k2, None))) l
 
             (* Configure *)
@@ -838,33 +814,14 @@ module Machines =
             let internal configure c =
                     graph c
                 >>> logPost
-                >>> first Configured
+                >>> first Graph
 
         (* Optimization *)
 
         [<RequireQualifiedAccess>]
         module Optimization =
 
-            (* Types
-
-                An optimized graph, having optimized away all Hephaestus Decisions
-                which result in literals, removing the choice point and directly
-                connecting the input edges to the appropriate next node given
-                the literal value. *)
-
-            type Optimized<'r,'s> =
-                | Optimized of GraphType<'r,'s>
-
-                static member graph_ : Isomorphism<Optimized<'r,'s>,GraphType<'r,'s>> =
-                    (fun (Optimized x) -> x), (Optimized)
-
-             and GraphType<'r,'s> =
-                Graph<Key, Node<'r,'s>,Common.Edge>
-
-             and Node<'r,'s> =
-                | Node of Common.Node
-                | Decision of ('s -> Async<DecisionValue * 's>)
-                | Terminal of ('s -> Async<'r * 's>)
+            (* Log *)
 
             type Log =
                 { Operations: Operation list
@@ -956,13 +913,13 @@ module Machines =
 
             (* Common Operations *)
 
-            let private outward<'r,'s> n v : Configuration.GraphType<'r,'s> -> Key =
+            let private outward n v =
                     Graph.Nodes.outward n
                  >> Option.get
-                 >> List.pick (function | _, t, Common.Value v' when v = v' -> Some t
+                 >> List.pick (function | _, t, Value v' when v = v' -> Some t
                                         | _ -> None)
 
-            let private inward<'r,'s> n t : Configuration.GraphType<'r,'s> -> LEdge<Key,Common.Edge> list =
+            let private inward n t  =
                     Graph.Nodes.inward n
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
@@ -973,50 +930,50 @@ module Machines =
 
             (* Literal Node Elimination *)
 
-            let rec private eliminateLiterals (graph: Configuration.GraphType<'r,'s>, l) =
+            let rec private eliminateLiterals (graph, l) =
                 match findLiteral graph with
                 | Some (n, v) -> eliminateLiterals (reconnect n v graph, eliminatedLiteral n l)
                 | _ -> graph, l
 
-            and private findLiteral (graph: Configuration.GraphType<'r,'s>) =
+            and private findLiteral graph =
                 Graph.Nodes.toList graph
-                |> List.tryPick (function | n, Configuration.Decision (Literal v) -> Some (n, v)
+                |> List.tryPick (function | n, Configured (Configured.Decision (Literal v)) -> Some (n, v)
                                           | _ -> None)
 
             (* Direct Node Elimination *)
 
-            let rec private eliminateDirect (graph: Configuration.GraphType<'r,'s>, l) =
+            let rec private eliminateDirect (graph, l) =
                 match findDirect graph with
                 | Some (n, v) -> eliminateDirect (reconnect n v graph, eliminatedDirect n l)
                 | _ -> graph, l
 
-            and private findDirect (graph: Configuration.GraphType<'r,'s>) =
+            and private findDirect graph =
                 Graph.Nodes.toList graph
                 |> List.tryPick (fun (key, _) ->
                     match Graph.Nodes.outward key graph with
-                    | Some ([ (_, _, Common.Value v) ]) when key <> Common.RootKey -> Some (key, v)
+                    | Some ([ (_, _, Value v) ]) when key <> RootKey -> Some (key, v)
                     | _ -> None)
 
             (* Subgraph Elimination *)
 
-            let rec private eliminateSubgraphs (graph: Configuration.GraphType<'r,'s>, l) =
+            let rec private eliminateSubgraphs (graph, l) =
                 match findSubgraph graph with
                 | Some n -> eliminateSubgraphs (Graph.Nodes.remove n graph, eliminatedSubgraphRoot n l)
                 | _ -> graph, l
 
-            and private findSubgraph (graph: Configuration.GraphType<'r,'s>) =
+            and private findSubgraph graph =
                 Graph.Nodes.toList graph
-                |> List.tryPick (function | n, _ when n = Common.RootKey -> None
+                |> List.tryPick (function | n, _ when n = RootKey -> None
                                           | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
                                           | _ -> None)
 
             (* Node Conversion *)
 
-            let private convert<'r,'s> : Configuration.GraphType<'r,'s> -> GraphType<'r,'s> =
+            let private convert<'c,'r,'s> : Homomorphism<Hekate.Graph<Key,Node<'c,'r,'s>,Edge>> =
                 Graph.Nodes.map (fun _ ->
-                    function | Configuration.Node n -> Node n
-                             | Configuration.Decision (Function f) -> Decision f
-                             | Configuration.Terminal (f) -> Terminal f
+                    function | Node -> Node
+                             | Configured (Configured.Decision (Function f)) -> Optimized (Optimized.Decision f)
+                             | Configured (Configured.Terminal (f)) -> Optimized (Optimized.Terminal f)
                              | _ -> failwith "Unexpected Node during Optimization.")
 
             (* Log *)
@@ -1029,7 +986,7 @@ module Machines =
                             function | (key, _) -> key, ()),
                         Graph.Edges.toList g
                         |> List.map (
-                            function | (k1, k2, Common.Value v) -> k1, k2, Some v
+                            function | (k1, k2, Value v) -> k1, k2, Some v
                                      | (k1, k2, _) -> k1, k2, None))) l
 
             (* Optimization *)
@@ -1044,27 +1001,28 @@ module Machines =
                     uncurry graph
                 >>> first convert
                 >>> logPost
-                >>> first Optimized
+                >>> first Graph
 
         (* Execution *)
 
         [<RequireQualifiedAccess>]
         module Execution =
 
-            let private next<'r,'s> n e : Optimization.GraphType<'r,'s> -> Key =
+            let private next n e =
                     Graph.Nodes.successors n
                  >> Option.get
                  >> List.pick (function | n, e' when e = e' -> Some n
                                         | _ -> None)
 
-            let rec private eval<'r,'s> n s (g: Optimization.GraphType<'r,'s>) =
+            let rec private traverse n s g =
                 match Graph.Nodes.find n g with
-                | n, Optimization.Node Common.Node -> eval (next n Common.Undefined g) s g
-                | n, Optimization.Decision f -> async.Bind (f s, fun (v, s) -> eval (next n (Common.Value v) g) s g)
-                | _, Optimization.Terminal f -> f s
+                | n, Node -> traverse (next n Undefined g) s g
+                | n, Optimized (Optimized.Decision f) -> async.Bind (f s, fun (v, s) -> traverse (next n (Value v) g) s g)
+                | _, Optimized (Optimized.Terminal f) -> f s
+                | _ -> failwith ""
 
-            let execute<'r,'s> state (Optimization.Optimized (g: Optimization.GraphType<'r,'s>)) =
-                eval Common.RootKey state g
+            let execute state (Graph g) =
+                traverse RootKey state g
 
     (* Prototype
 
@@ -1080,16 +1038,16 @@ module Machines =
         (* Types *)
 
         type Prototype<'c,'r,'s> =
-            | Prototype of Translation.Translated<'c,'r,'s>
+            | Prototype of Graph<'c,'r,'s>
 
         type PrototypeCreationLog =
-            { Translation: Translation.Log }
+            { Construction: Construction.Log }
 
             static member empty =
-                { Translation = Translation.Log.empty }
+                { Construction = Construction.Log.empty }
 
-            static member translation_ =
-                (fun x -> x.Translation), (fun t x -> { x with Translation = t })
+            static member construction_ =
+                (fun x -> x.Construction), (fun t x -> { x with Construction = t })
 
         (* Creation *)
 
@@ -1100,7 +1058,7 @@ module Machines =
 
             let private translation_ =
                     Option.value_
-                >?> PrototypeCreationLog.translation_
+                >?> PrototypeCreationLog.construction_
 
             (* Patterns *)
 
@@ -1110,7 +1068,7 @@ module Machines =
             (* Functions *)
 
             let private translate _ =
-                    specification *** Optic.get translation_ >>> Translation.translate () &&& snd
+                    specification *** Optic.get translation_ >>> Construction.construct () &&& snd
                 >>> function | (t, Some l), log -> t, Optic.set translation_ l log
                              | (t, _), log -> t, log
 
@@ -1120,10 +1078,10 @@ module Machines =
 
         (* Functions *)
 
-        let create<'c,'r,'s> (model: Model<'c,'r,'s>) =
+        let create model =
             Create.prototype () (model, None) |> fst
 
-        let createLogged<'c,'r,'s> (model: Model<'c,'r,'s>) =
+        let createLogged model =
             Create.prototype () (model, Some PrototypeCreationLog.empty) |> second Option.get
 
     (* Machine
@@ -1142,8 +1100,8 @@ module Machines =
 
         (* Types *)
 
-        type Machine<'r,'s> =
-            | Machine of Optimization.Optimized<'r,'s>
+        type Machine<'c,'r,'s> =
+            | Machine of Graph<'c,'r,'s>
 
         type MachineCreationLog =
             { Configuration: Configuration.Log
@@ -1176,21 +1134,18 @@ module Machines =
 
             (* Patterns *)
 
-            let private translated =
-                    function | Translation.Translated t -> t
-
-            let private configured =
-                    function | Configuration.Configured c -> c
+            let private graph =
+                    function | Graph g -> g
 
             (* Functions *)
 
             let private configure c =
-                    translated *** Optic.get configuration_ >>> Configuration.configure c &&& snd
+                    graph *** Optic.get configuration_ >>> Configuration.configure c &&& snd
                 >>> function | (c, Some l), log -> c, Optic.set configuration_ l log
                              | (c, _), log -> c, log
 
             let private optimize _ =
-                    configured *** Optic.get optimization_ >>> Optimization.optimize () &&& snd
+                    graph *** Optic.get optimization_ >>> Optimization.optimize () &&& snd
                 >>> function | (o, Some l), log -> o, Optic.set optimization_ l log
                              | (o, _), log -> o, log
 
@@ -1201,11 +1156,11 @@ module Machines =
 
         (* Functions *)
 
-        let create<'c,'r,'s> (Prototype.Prototype (t: Translation.Translated<'c,'r,'s>)) configuration =
-            Create.machine configuration (t, None) |> fst
+        let create (Prototype.Prototype g) configuration =
+            Create.machine configuration (g, None) |> fst
 
-        let createLogged<'c,'r,'s> (Prototype.Prototype (t: Translation.Translated<'c,'r,'s>)) configuration =
-            Create.machine configuration (t, Some MachineCreationLog.empty) |> second Option.get
+        let createLogged (Prototype.Prototype g) configuration =
+            Create.machine configuration (g, Some MachineCreationLog.empty) |> second Option.get
 
-        let execute<'r,'s> (Machine (g: Optimization.Optimized<'r,'s>)) state =
+        let execute (Machine g) state =
             Execution.execute state g
