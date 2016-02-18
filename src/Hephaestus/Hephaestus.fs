@@ -6,7 +6,6 @@ open Aether.Operators
 open Anat
 open Anat.Operators
 
-// TODO: Result graphs as part of each Pass
 // TODO: Pre/post-condition analysis
 // TODO: Logging/Introspection mechanisms (to be completed for execution - async)
 
@@ -319,9 +318,9 @@ module Models =
             >>> uncurry Graph.create
 
         let private independent graph =
-            Graph.Nodes.toList graph
-            |> List.tryFind (fun (v, _) -> Graph.Nodes.inwardDegree v graph = Some 0)
-            |> Option.map (fun (v, l) -> l, Graph.Nodes.remove v graph)
+            Nodes.toList graph
+            |> List.tryFind (fun (v, _) -> Nodes.inwardDegree v graph = Some 0)
+            |> Option.map (fun (v, l) -> l, Nodes.remove v graph)
 
         let rec private order modules graph =
             match independent graph with
@@ -461,13 +460,25 @@ module Machines =
                 Log []
 
          and Pass =
-            | Pass of string * Operation list
+            | Pass of string * Hekate.Graph<Key,Descriptor,Edge> * Operation list
 
             static member name_ =
-                (fun (Pass (n, _)) -> n), (fun n (Pass (_, o)) -> Pass (n, o))
+                (fun (Pass (n, _, _)) -> n), (fun n (Pass (_, g, o)) -> Pass (n, g, o))
+
+            static member graph_ =
+                (fun (Pass (_, g, _)) -> g), (fun g (Pass (n, _, o)) -> Pass (n, g, o))
 
             static member operations_ =
-                (fun (Pass (_, o)) -> o), (fun o (Pass (n, _)) -> Pass (n, o))
+                (fun (Pass (_, _, o)) -> o), (fun o (Pass (n, g, _)) -> Pass (n, g, o))
+
+         and Descriptor =
+            | Descriptor of string * Map<string,string>
+
+            static member name_ =
+                (fun (Descriptor (n, _)) -> n), (fun n (Descriptor (_, p)) -> Descriptor (n, p))
+
+            static member properties_ =
+                (fun (Descriptor (_, p)) -> p), (fun p (Descriptor (n, _)) -> Descriptor (n, p))
 
          and Operation =
             | Operation of string * Map<string,string>
@@ -477,6 +488,17 @@ module Machines =
 
             static member properties_ =
                 (fun (Operation (_, p)) -> p), (fun p (Operation (n, _)) -> Operation (n, p))
+
+        (* Constructors *)
+
+        let private pass name graph operations =
+            Pass (name, graph, operations)
+
+        let private descriptor name pairs =
+            Descriptor (name, Map.ofList pairs)
+
+        let private operation name pairs =
+            Operation (name, Map.ofList pairs)
 
         (* Logging
 
@@ -492,15 +514,27 @@ module Machines =
             let private passes_ =
                     Lens.ofIsomorphism Log.passes_
 
-            let private operations_ =
+            let private pass_ =
                     passes_
                 >-> List.head_
+
+            let private graph_ =
+                    pass_
+                >?> Pass.graph_
+
+            let private operations_ =
+                    pass_
                 >?> Pass.operations_
 
-            let pass name =
+            let pass n =
                 Option.map (
                     Optic.map passes_ (fun ps ->
-                        Pass (name, []) :: ps))
+                        pass n Graph.empty [] :: ps))
+
+            let graph g =
+                Option.map (
+                    Optic.map graph_ (fun _ ->
+                        g))
 
             let operation o =
                 Option.map (
@@ -522,21 +556,34 @@ module Machines =
 
             (* Logging *)
 
+            let private logPass =
+                Log.pass "construction"
+
             let private logDecision k =
                 Log.operation (
-                    Operation ("decision-constructed",
-                               Map.ofList [ "decision", string k ]))
+                    operation
+                        "decision-constructed"
+                        [ "decision", string k ])
 
             let private logTerminal k =
                 Log.operation (
-                    Operation ("terminal-constructed",
-                               Map.ofList [ "terminal", string k ]))
+                    operation
+                        "terminal-constructed"
+                        [ "terminal", string k ])
 
             let private logEdge k1 k2 =
                 Log.operation (
-                    Operation ("edge-constructed",
-                               Map.ofList [ "from", string k1
-                                            "to", string k2 ]))
+                    operation
+                        "edge-constructed"
+                        [ "from", string k1
+                          "to",   string k2 ])
+
+            let private logGraph (g, l) =
+                g, Log.graph (
+                    Nodes.map (fun _ ->
+                        function | Node -> descriptor "" []
+                                 | Decision _ -> descriptor "unconfigured-decision" []
+                                 | Terminal _ -> descriptor "unconfigured-terminal" []) g) l
 
             (* Construction
 
@@ -553,10 +600,10 @@ module Machines =
             and private decision k c l r =
                     nodes l
                 >>> nodes r
-                >>> Graph.Nodes.add (k, Decision (Decision.Unconfigured c)) *** logDecision k
+                >>> Nodes.add (k, Decision (Decision.Unconfigured c)) *** logDecision k
 
             and private terminal k c =
-                    Graph.Nodes.add (k, Terminal (Terminal.Unconfigured c)) *** logTerminal k
+                    Nodes.add (k, Terminal (Unconfigured c)) *** logTerminal k
 
             (* Edges *)
 
@@ -567,26 +614,24 @@ module Machines =
             and private edge k l r =
                     edges l
                 >>> edges r
-                >>> Graph.Edges.add (k, (|Key|) l, Value Left) *** logEdge k ((|Key|) l)
-                >>> Graph.Edges.add (k, (|Key|) r, Value Right) *** logEdge k ((|Key|) r)
+                >>> Edges.add (k, (|Key|) l, Value Left) *** logEdge k ((|Key|) l)
+                >>> Edges.add (k, (|Key|) r, Value Right) *** logEdge k ((|Key|) r)
 
             (* Graph *)
-
-            let private empty _ =
-                    Graph.empty
 
             let private graph s =
                     nodes s
                 >>> edges s
-                >>> first (Graph.Nodes.add (RootKey, Node))
-                >>> first (Graph.Edges.add (RootKey, (|Key|) s, Undefined))
+                >>> first (Nodes.add (RootKey, Node))
+                >>> first (Edges.add (RootKey, (|Key|) s, Undefined))
 
             (* Construct *)
 
             let internal construct _ =
-                    second (Log.pass "construction")
+                    second logPass
                 >>> second (tuple Graph.empty)
                 >>> uncurry graph
+                >>> logGraph
                 >>> first Graph
 
         (* Configuration *)
@@ -595,6 +640,9 @@ module Machines =
         module Configuration =
 
             (* Logging *)
+
+            let private logPass =
+                Log.pass "configuration"
 
             let private logLiteral k v =
                 Log.operation (
@@ -612,6 +660,15 @@ module Machines =
                     Operation ("terminal-configured",
                                Map.ofList [ "terminal", string k ]))
 
+            let private logGraph (g, l) =
+                g, Log.graph (
+                    Nodes.map (fun _ ->
+                        function | Node -> descriptor "" []
+                                 | Decision (Configured (Literal l)) -> descriptor "literal-decision" [ "result", string l ]
+                                 | Decision (Configured _) -> descriptor "function-decision" []
+                                 | Terminal (Final _) -> descriptor "final-terminal" []
+                                 | _ -> failwith "Unexpected Node Type") g) l
+
             (* Configuration
 
                Configuration of a graph, involving the application of
@@ -622,26 +679,27 @@ module Machines =
             (* Functions *)
 
             let private decision l k =
-                function | Literal v -> Decision (Decision.Configured (Literal v)), logLiteral k v l
-                         | Function f -> Decision (Decision.Configured (Function f)), logFunction k l
+                function | Literal v -> Decision (Configured (Literal v)), logLiteral k v l
+                         | Function f -> Decision (Configured (Function f)), logFunction k l
 
             let private terminal l k =
-                function | f -> Terminal (Terminal.Final f), logTerminal k l
+                function | f -> Terminal (Final f), logTerminal k l
 
             let private nodes c l k =
                 function | Decision (Decision.Unconfigured f) -> decision l k (f c)
-                         | Terminal (Terminal.Unconfigured f) -> terminal l k (f c)
+                         | Terminal (Unconfigured f) -> terminal l k (f c)
                          | n -> n, l
 
             let private graph c =
-                    uncurry (flip (Graph.Nodes.mapFold (nodes c)))
+                    uncurry (flip (Nodes.mapFold (nodes c)))
                  >> swap
 
             (* Configure *)
 
             let internal configure c =
-                    second (Log.pass "configuration")
+                    second logPass
                 >>> graph c
+                >>> logGraph
                 >>> first Graph
 
         (* Optimization *)
@@ -652,19 +710,19 @@ module Machines =
             (* Common *)
 
             let private outward k v =
-                    Graph.Nodes.outward k
+                    Nodes.outward k
                  >> Option.get
                  >> List.pick (function | _, t, Value v' when v = v' -> Some t
                                         | _ -> None)
 
             let private inward k t =
-                    Graph.Nodes.inward k
+                    Nodes.inward k
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
 
             let private reconnect k v =
-                    ((outward k v &&& id) >>> uncurry (inward k)) &&& id >>> uncurry Graph.Edges.addMany
-                >>> Graph.Nodes.remove k
+                    ((outward k v &&& id) >>> uncurry (inward k)) &&& id >>> uncurry Edges.addMany
+                >>> Nodes.remove k
 
             (* Literal Elimination *)
 
@@ -673,10 +731,21 @@ module Machines =
 
                 (* Logging *)
 
+                let private logPass =
+                    Log.pass "optimization-literal-elimination"
+
                 let private logLiteral k =
                     Log.operation (
                         Operation ("literal-eliminated",
                                    Map.ofList [ "decision", string k ]))
+
+                let private logGraph (g, l) =
+                    g, Log.graph (
+                        Nodes.map (fun _ ->
+                            function | Node -> descriptor "" []
+                                     | Decision (Configured _) -> descriptor "function-decision" []
+                                     | Terminal (Final _) -> descriptor "final-terminal" []
+                                     | _ -> failwith "Unexpected Node Type") g) l
 
                 (* Elimination *)
 
@@ -686,15 +755,16 @@ module Machines =
                     | _ -> g, l
 
                 and private findLiteral g =
-                    Graph.Nodes.toList g
+                    Nodes.toList g
                     |> List.tryPick (function | k, Decision (Decision.Configured (Literal v)) -> Some (k, v)
                                               | _ -> None)
 
                 (* Optimization *)
 
                 let optimize _ =
-                        second (Log.pass "optimization-literal-elimination")
+                        second logPass
                     >>> eliminateLiterals
+                    >>> logGraph
 
             (* Unary Elimination *)
 
@@ -703,10 +773,21 @@ module Machines =
 
                 (* Logging *)
 
+                let private logPass =
+                    Log.pass "optimization-unary-elimination"
+
                 let private logUnary k =
                     Log.operation (
                         Operation ("unary-eliminated",
                                    Map.ofList [ "decision", string k ]))
+
+                let private logGraph (g, l) =
+                    g, Log.graph (
+                        Nodes.map (fun _ ->
+                            function | Node -> descriptor "" []
+                                     | Decision (Configured _) -> descriptor "function-decision" []
+                                     | Terminal (Final _) -> descriptor "final-terminal" []
+                                     | _ -> failwith "Unexpected Node Type") g) l
 
                 (* Elimination *)
 
@@ -716,17 +797,18 @@ module Machines =
                     | _ -> g, l
 
                 and private findUnary g =
-                    Graph.Nodes.toList g
+                    Nodes.toList g
                     |> List.tryPick (fun (k, _) ->
-                        match Graph.Nodes.outward k g with
+                        match Nodes.outward k g with
                         | Some ([ (_, _, Value v) ]) when k <> RootKey -> Some (k, v)
                         | _ -> None)
 
                 (* Optimization *)
 
                 let optimize _ =
-                        second (Log.pass "optimization-unary-elimination")
+                        second logPass
                     >>> eliminateUnary
+                    >>> logGraph
 
             (* Subgraph Elimination *)
 
@@ -735,49 +817,75 @@ module Machines =
 
                 (* Logging *)
 
+                let private logPass =
+                    Log.pass "optimization-subgraph-elimination"
+
                 let private logSubgraph k =
                     Log.operation (
                         Operation ("subgraph-root-eliminated",
                                    Map.ofList [ "decision", string k ]))
 
+                let private logGraph (g, l) =
+                    g, Log.graph (
+                        Nodes.map (fun _ ->
+                            function | Node -> descriptor "" []
+                                     | Decision (Configured _) -> descriptor "function-decision" []
+                                     | Terminal (Final _) -> descriptor "final-terminal" []
+                                     | _ -> failwith "Unexpected Node Type") g) l
+
                 (* Elimination *)
 
                 let rec private eliminateSubgraphs (graph, l) =
                     match findSubgraph graph with
-                    | Some k -> eliminateSubgraphs (Graph.Nodes.remove k graph, logSubgraph k l)
+                    | Some k -> eliminateSubgraphs (Nodes.remove k graph, logSubgraph k l)
                     | _ -> graph, l
 
                 and private findSubgraph graph =
-                    Graph.Nodes.toList graph
+                    Nodes.toList graph
                     |> List.tryPick (function | k, _ when k = RootKey -> None
-                                              | k, _ when Graph.Nodes.inwardDegree k graph = Some 0 -> Some k
+                                              | k, _ when Nodes.inwardDegree k graph = Some 0 -> Some k
                                               | _ -> None)
 
                 (* Optimization *)
 
                 let optimize _ =
-                        second (Log.pass "optimization-subgraph-elimination")
+                        second logPass
                     >>> eliminateSubgraphs
+                    >>> logGraph
 
             (* Finalization *)
 
             [<RequireQualifiedAccess>]
             module private Finalization =
 
+                (* Logging *)
+
+                let private logPass =
+                    Log.pass "optimization-finalization"
+
+                let private logGraph (g, l) =
+                    g, Log.graph (
+                        Nodes.map (fun _ ->
+                            function | Node -> descriptor "" []
+                                     | Decision (Decision.Final _) -> descriptor "final-decision" []
+                                     | Terminal (Final _) -> descriptor "final-terminal" []
+                                     | _ -> failwith "Unexpected Node Type") g) l
+
                 (* Finalization *)
 
                 let private finalize<'c,'r,'s> : Homomorphism<Hekate.Graph<Key,Node<'c,'r,'s>,Edge>> =
-                    Graph.Nodes.map (fun _ ->
+                    Nodes.map (fun _ ->
                         function | Node -> Node
-                                 | Decision (Decision.Configured (Function f)) -> Decision (Decision.Final f)
-                                 | Terminal (Terminal.Final f) -> Terminal (Terminal.Final f)
+                                 | Decision (Configured (Function f)) -> Decision (Decision.Final f)
+                                 | Terminal (Final f) -> Terminal (Final f)
                                  | _ -> failwith "Unexpected Node during Optimization.")
 
                 (* Optimization *)
 
                 let optimize _ =
-                        second (Log.pass "optimization-finalization")
+                        second logPass
                     >>> first finalize
+                    >>> logGraph
 
             (* Optimization *)
 
@@ -798,13 +906,13 @@ module Machines =
         module Execution =
 
             let private next k e =
-                    Graph.Nodes.successors k
+                    Nodes.successors k
                  >> Option.get
                  >> List.pick (function | k, e' when e = e' -> Some k
                                         | _ -> None)
 
             let rec private traverse k s g =
-                match Graph.Nodes.find k g with
+                match Nodes.find k g with
                 | k, Node -> traverse (next k Undefined g) s g
                 | k, Decision (Decision.Final f) -> async.Bind (f s, fun (v, s) -> traverse (next k (Value v) g) s g)
                 | _, Terminal (Terminal.Final f) -> f s
