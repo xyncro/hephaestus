@@ -6,6 +6,7 @@ open Aether.Operators
 open Anat
 open Anat.Operators
 
+// TODO: Result graphs as part of each Pass
 // TODO: Pre/post-condition analysis
 // TODO: Logging/Introspection mechanisms (to be completed for execution - async)
 
@@ -87,19 +88,19 @@ type Key =
     override x.ToString () =
         (function | Key x -> String.Join (".", Array.ofList x)) x
 
-type Decision<'s> =
-    | Function of ('s -> Async<DecisionValue * 's>)
-    | Literal of DecisionValue
+type DecisionValue<'s> =
+    | Function of ('s -> Async<DecisionResult * 's>)
+    | Literal of DecisionResult
 
-    static member function_ : Epimorphism<Decision<'s>,('s -> Async<DecisionValue * 's>)> =
+    static member function_ : Epimorphism<DecisionValue<'s>,('s -> Async<DecisionResult * 's>)> =
         (function | Function f -> Some f
                   | _ -> None), (Function)
 
-    static member literal_ : Epimorphism<Decision<'s>,DecisionValue> =
+    static member literal_ : Epimorphism<DecisionValue<'s>,DecisionResult> =
         (function | Literal l -> Some l
                   | _ -> None), (Literal)
 
- and DecisionValue =
+ and DecisionResult =
     | Right
     | Left
 
@@ -124,7 +125,7 @@ module Specifications =
        optimized, etc. *)
 
     type Specification<'c,'r,'s> =
-        | Decision of Key * ('c -> Decision<'s>) * Pair<Specification<'c,'r,'s>>
+        | Decision of Key * ('c -> DecisionValue<'s>) * Pair<Specification<'c,'r,'s>>
         | Terminal of Key * ('c -> 's -> Async<'r * 's>)
 
         static member decision_ =
@@ -137,7 +138,7 @@ module Specifications =
 
     type SpecificationOperation<'c,'r,'s> =
         | Prepend of Homomorphism<Specification<'c,'r,'s>>
-        | Splice of Key * DecisionValue * Homomorphism<Specification<'c,'r,'s>>
+        | Splice of Key * DecisionResult * Homomorphism<Specification<'c,'r,'s>>
 
     (* Helpers *)
 
@@ -432,25 +433,21 @@ module Machines =
 
          and Node<'c,'r,'s> =
             | Node
-            | Constructed of Constructed<'c,'r,'s>
-            | Configured of Configured<'r,'s>
-            | Optimized of Optimized<'r,'s>
+            | Decision of Decision<'c,'r,'s>
+            | Terminal of Terminal<'c,'r,'s>
 
-         and Constructed<'c,'r,'s> =
-            | Decision of ('c -> Decision<'s>)
-            | Terminal of ('c -> 's -> Async<'r * 's>)
+         and Decision<'c,'r,'s> =
+            | Unconfigured of ('c -> DecisionValue<'s>)
+            | Configured of DecisionValue<'s>
+            | Final of ('s -> Async<DecisionResult * 's>)
 
-         and Configured<'r,'s> =
-            | Decision of Decision<'s>
-            | Terminal of ('s -> Async<'r * 's>)
-
-         and Optimized<'r,'s> =
-            | Decision of ('s -> Async<DecisionValue * 's>)
-            | Terminal of ('s -> Async<'r * 's>)
+         and Terminal<'c,'r,'s> =
+            | Unconfigured of ('c -> 's -> Async<'r * 's>)
+            | Final of ('s -> Async<'r * 's>)
 
          and Edge =
             | Undefined
-            | Value of DecisionValue
+            | Value of DecisionResult
 
         (* Logs *)
 
@@ -556,10 +553,10 @@ module Machines =
             and private decision k c l r =
                     nodes l
                 >>> nodes r
-                >>> Graph.Nodes.add (k, Constructed (Constructed.Decision c)) *** logDecision k
+                >>> Graph.Nodes.add (k, Decision (Decision.Unconfigured c)) *** logDecision k
 
             and private terminal k c =
-                    Graph.Nodes.add (k, Constructed (Constructed.Terminal c)) *** logTerminal k
+                    Graph.Nodes.add (k, Terminal (Terminal.Unconfigured c)) *** logTerminal k
 
             (* Edges *)
 
@@ -625,15 +622,15 @@ module Machines =
             (* Functions *)
 
             let private decision l k =
-                function | Literal v -> Configured (Configured.Decision (Literal v)), logLiteral k v l
-                         | Function f -> Configured (Configured.Decision (Function f)), logFunction k l
+                function | Literal v -> Decision (Decision.Configured (Literal v)), logLiteral k v l
+                         | Function f -> Decision (Decision.Configured (Function f)), logFunction k l
 
             let private terminal l k =
-                function | f -> Configured (Configured.Terminal f), logTerminal k l
+                function | f -> Terminal (Terminal.Final f), logTerminal k l
 
             let private nodes c l k =
-                function | Constructed (Constructed.Decision f) -> decision l k (f c)
-                         | Constructed (Constructed.Terminal f) -> terminal l k (f c)
+                function | Decision (Decision.Unconfigured f) -> decision l k (f c)
+                         | Terminal (Terminal.Unconfigured f) -> terminal l k (f c)
                          | n -> n, l
 
             let private graph c =
@@ -652,101 +649,147 @@ module Machines =
         [<RequireQualifiedAccess>]
         module Optimization =
 
-            (* Logging *)
+            (* Common *)
 
-            let private logLiteral k =
-                Log.operation (
-                    Operation ("literal-eliminated",
-                               Map.ofList [ "decision", string k ]))
-
-            let private logDirect k =
-                Log.operation (
-                    Operation ("direct-eliminated",
-                               Map.ofList [ "decision", string k ]))
-
-            let private logSubgraph k =
-                Log.operation (
-                    Operation ("subgraph-root-eliminated",
-                               Map.ofList [ "decision", string k ]))
-
-            (* Common Operations *)
-
-            let private outward n v =
-                    Graph.Nodes.outward n
+            let private outward k v =
+                    Graph.Nodes.outward k
                  >> Option.get
                  >> List.pick (function | _, t, Value v' when v = v' -> Some t
                                         | _ -> None)
 
-            let private inward n t  =
-                    Graph.Nodes.inward n
+            let private inward k t =
+                    Graph.Nodes.inward k
                  >> Option.get
                  >> List.map (fun (f, _, v) -> (f, t, v))
 
-            let private reconnect n v =
-                    ((outward n v &&& id) >>> uncurry (inward n)) &&& id >>> uncurry Graph.Edges.addMany
-                >>> Graph.Nodes.remove n
+            let private reconnect k v =
+                    ((outward k v &&& id) >>> uncurry (inward k)) &&& id >>> uncurry Graph.Edges.addMany
+                >>> Graph.Nodes.remove k
 
-            (* Literal Node Elimination *)
+            (* Literal Elimination *)
 
-            let rec private eliminateLiterals (graph, l) =
-                match findLiteral graph with
-                | Some (n, v) -> eliminateLiterals (reconnect n v graph, logLiteral n l)
-                | _ -> graph, l
+            [<RequireQualifiedAccess>]
+            module private LiteralElimination =
 
-            and private findLiteral graph =
-                Graph.Nodes.toList graph
-                |> List.tryPick (function | n, Configured (Configured.Decision (Literal v)) -> Some (n, v)
-                                          | _ -> None)
+                (* Logging *)
 
-            (* Direct Node Elimination *)
+                let private logLiteral k =
+                    Log.operation (
+                        Operation ("literal-eliminated",
+                                   Map.ofList [ "decision", string k ]))
 
-            let rec private eliminateDirect (graph, l) =
-                match findDirect graph with
-                | Some (n, v) -> eliminateDirect (reconnect n v graph, logDirect n l)
-                | _ -> graph, l
+                (* Elimination *)
 
-            and private findDirect graph =
-                Graph.Nodes.toList graph
-                |> List.tryPick (fun (key, _) ->
-                    match Graph.Nodes.outward key graph with
-                    | Some ([ (_, _, Value v) ]) when key <> RootKey -> Some (key, v)
-                    | _ -> None)
+                let rec private eliminateLiterals (g, l) =
+                    match findLiteral g with
+                    | Some (k, v) -> eliminateLiterals (reconnect k v g, logLiteral k l)
+                    | _ -> g, l
+
+                and private findLiteral g =
+                    Graph.Nodes.toList g
+                    |> List.tryPick (function | k, Decision (Decision.Configured (Literal v)) -> Some (k, v)
+                                              | _ -> None)
+
+                (* Optimization *)
+
+                let optimize _ =
+                        second (Log.pass "optimization-literal-elimination")
+                    >>> eliminateLiterals
+
+            (* Unary Elimination *)
+
+            [<RequireQualifiedAccess>]
+            module private UnaryElimination =
+
+                (* Logging *)
+
+                let private logUnary k =
+                    Log.operation (
+                        Operation ("unary-eliminated",
+                                   Map.ofList [ "decision", string k ]))
+
+                (* Elimination *)
+
+                let rec private eliminateUnary (g, l) =
+                    match findUnary g with
+                    | Some (k, v) -> eliminateUnary (reconnect k v g, logUnary k l)
+                    | _ -> g, l
+
+                and private findUnary g =
+                    Graph.Nodes.toList g
+                    |> List.tryPick (fun (k, _) ->
+                        match Graph.Nodes.outward k g with
+                        | Some ([ (_, _, Value v) ]) when k <> RootKey -> Some (k, v)
+                        | _ -> None)
+
+                (* Optimization *)
+
+                let optimize _ =
+                        second (Log.pass "optimization-unary-elimination")
+                    >>> eliminateUnary
 
             (* Subgraph Elimination *)
 
-            let rec private eliminateSubgraphs (graph, l) =
-                match findSubgraph graph with
-                | Some n -> eliminateSubgraphs (Graph.Nodes.remove n graph, logSubgraph n l)
-                | _ -> graph, l
+            [<RequireQualifiedAccess>]
+            module private SubgraphElimination =
 
-            and private findSubgraph graph =
-                Graph.Nodes.toList graph
-                |> List.tryPick (function | n, _ when n = RootKey -> None
-                                          | n, _ when Graph.Nodes.inwardDegree n graph = Some 0 -> Some n
-                                          | _ -> None)
+                (* Logging *)
 
-            (* Node Conversion *)
+                let private logSubgraph k =
+                    Log.operation (
+                        Operation ("subgraph-root-eliminated",
+                                   Map.ofList [ "decision", string k ]))
 
-            let private convert<'c,'r,'s> : Homomorphism<Hekate.Graph<Key,Node<'c,'r,'s>,Edge>> =
-                Graph.Nodes.map (fun _ ->
-                    function | Node -> Node
-                             | Configured (Configured.Decision (Function f)) -> Optimized (Optimized.Decision f)
-                             | Configured (Configured.Terminal (f)) -> Optimized (Optimized.Terminal f)
-                             | _ -> failwith "Unexpected Node during Optimization.")
+                (* Elimination *)
 
+                let rec private eliminateSubgraphs (graph, l) =
+                    match findSubgraph graph with
+                    | Some k -> eliminateSubgraphs (Graph.Nodes.remove k graph, logSubgraph k l)
+                    | _ -> graph, l
+
+                and private findSubgraph graph =
+                    Graph.Nodes.toList graph
+                    |> List.tryPick (function | k, _ when k = RootKey -> None
+                                              | k, _ when Graph.Nodes.inwardDegree k graph = Some 0 -> Some k
+                                              | _ -> None)
+
+                (* Optimization *)
+
+                let optimize _ =
+                        second (Log.pass "optimization-subgraph-elimination")
+                    >>> eliminateSubgraphs
+
+            (* Finalization *)
+
+            [<RequireQualifiedAccess>]
+            module private Finalization =
+
+                (* Finalization *)
+
+                let private finalize<'c,'r,'s> : Homomorphism<Hekate.Graph<Key,Node<'c,'r,'s>,Edge>> =
+                    Graph.Nodes.map (fun _ ->
+                        function | Node -> Node
+                                 | Decision (Decision.Configured (Function f)) -> Decision (Decision.Final f)
+                                 | Terminal (Terminal.Final f) -> Terminal (Terminal.Final f)
+                                 | _ -> failwith "Unexpected Node during Optimization.")
+
+                (* Optimization *)
+
+                let optimize _ =
+                        second (Log.pass "optimization-finalization")
+                    >>> first finalize
 
             (* Optimization *)
 
-            let private graph g =
+            let private passes g =
                     tuple g
-                 >> eliminateLiterals
-                 >> eliminateDirect
-                 >> eliminateSubgraphs
+                 >> LiteralElimination.optimize ()
+                 >> UnaryElimination.optimize ()
+                 >> SubgraphElimination.optimize ()
+                 >> Finalization.optimize ()
 
             let internal optimize _ =
-                    second (Log.pass "optimization")
-                >>> uncurry graph
-                >>> first convert
+                    uncurry passes
                 >>> first Graph
 
         (* Execution *)
@@ -754,17 +797,17 @@ module Machines =
         [<RequireQualifiedAccess>]
         module Execution =
 
-            let private next n e =
-                    Graph.Nodes.successors n
+            let private next k e =
+                    Graph.Nodes.successors k
                  >> Option.get
-                 >> List.pick (function | n, e' when e = e' -> Some n
+                 >> List.pick (function | k, e' when e = e' -> Some k
                                         | _ -> None)
 
-            let rec private traverse n s g =
-                match Graph.Nodes.find n g with
-                | n, Node -> traverse (next n Undefined g) s g
-                | n, Optimized (Optimized.Decision f) -> async.Bind (f s, fun (v, s) -> traverse (next n (Value v) g) s g)
-                | _, Optimized (Optimized.Terminal f) -> f s
+            let rec private traverse k s g =
+                match Graph.Nodes.find k g with
+                | k, Node -> traverse (next k Undefined g) s g
+                | k, Decision (Decision.Final f) -> async.Bind (f s, fun (v, s) -> traverse (next k (Value v) g) s g)
+                | _, Terminal (Terminal.Final f) -> f s
                 | _ -> failwith ""
 
             let execute state (Graph g) =
