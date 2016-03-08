@@ -591,37 +591,49 @@ module Machines =
                representation of the equivalent (unmodified) decision graph, prior
                to applying instance specific configuration to the graph. *)
 
+            (* Common *)
+
+            let private key =
+                (|Key|)
+
             (* Nodes *)
 
-            let rec private nodes =
-                    function | Specification.Decision (k, c, (l, r)) -> decision k c l r
-                             | Specification.Terminal (k, c) -> terminal k c
+            let rec private nodes (g, log) =
+                function | Specification.Decision (k, c, (l, r)) when noNode g k -> decision k c l r (g, log)
+                         | Specification.Terminal (k, c) when noNode g k -> terminal k c (g, log)
+                         | _ -> (g, log)
 
             and private decision k c l r =
-                    nodes l
-                >>> nodes r
+                    flip nodes l
+                >>> flip nodes r
                 >>> Nodes.add (k, Decision (Decision.Unconfigured c)) *** logDecision k
 
             and private terminal k c =
                     Nodes.add (k, Terminal (Unconfigured c)) *** logTerminal k
 
+            and private noNode g k =
+                    not (Nodes.contains k g)
+
             (* Edges *)
 
-            let rec private edges =
-                    function | Specifications.Decision (k, _, (l, r)) -> edge k l r
-                             | Specification.Terminal _ -> id
+            let rec private edges (g, log) =
+                function | Specifications.Decision (k, _, (l, r)) when noEdge g (key l) (key r) -> edge k l r (g, log)
+                         | _ -> (g, log)
 
             and private edge k l r =
-                    edges l
-                >>> edges r
-                >>> Edges.add (k, (|Key|) l, Value Left) *** logEdge k ((|Key|) l)
-                >>> Edges.add (k, (|Key|) r, Value Right) *** logEdge k ((|Key|) r)
+                    flip edges l
+                >>> flip edges r
+                >>> Edges.add (k, key l, Value Left) *** logEdge k ((|Key|) l)
+                >>> Edges.add (k, key r, Value Right) *** logEdge k ((|Key|) r)
+
+            and private noEdge g l r =
+                    not (Edges.contains l r g)
 
             (* Graph *)
 
             let private graph s =
-                    nodes s
-                >>> edges s
+                    flip nodes s
+                >>> flip edges s
                 >>> first (Nodes.add (RootKey, Node))
                 >>> first (Edges.add (RootKey, (|Key|) s, Undefined))
 
@@ -692,7 +704,7 @@ module Machines =
 
             let private graph c =
                     uncurry (flip (Nodes.mapFold (nodes c)))
-                 >> swap
+                >>> swap
 
             (* Configure *)
 
@@ -891,10 +903,10 @@ module Machines =
 
             let private passes g =
                     tuple g
-                 >> LiteralElimination.optimize ()
-                 >> UnaryElimination.optimize ()
-                 >> SubgraphElimination.optimize ()
-                 >> Finalization.optimize ()
+                >>> LiteralElimination.optimize ()
+                >>> UnaryElimination.optimize ()
+                >>> SubgraphElimination.optimize ()
+                >>> Finalization.optimize ()
 
             let internal optimize _ =
                     uncurry passes
