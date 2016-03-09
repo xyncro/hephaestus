@@ -600,10 +600,16 @@ module Machines =
             and private decision k c l r =
                     nodes l
                 >>> nodes r
-                >>> Nodes.add (k, Decision (Decision.Unconfigured c)) *** logDecision k
+                >>> fun (g, log) ->
+                        match Nodes.contains k g with
+                        | false -> Nodes.add (k, Decision (Decision.Unconfigured c)) g, logDecision k log
+                        | _ -> g, log
 
             and private terminal k c =
-                    Nodes.add (k, Terminal (Unconfigured c)) *** logTerminal k
+                    fun (g, log) ->
+                        match Nodes.contains k g with
+                        | false -> Nodes.add (k, Terminal (Unconfigured c)) g, logTerminal k log
+                        | _ -> g, log
 
             (* Edges *)
 
@@ -614,8 +620,14 @@ module Machines =
             and private edge k l r =
                     edges l
                 >>> edges r
-                >>> Edges.add (k, (|Key|) l, Value Left) *** logEdge k ((|Key|) l)
-                >>> Edges.add (k, (|Key|) r, Value Right) *** logEdge k ((|Key|) r)
+                >>> fun (g, log) ->
+                        match Edges.contains k ((|Key|) l) g with
+                        | false -> Edges.add (k, (|Key|) l, Value Left) g, logEdge k ((|Key|) l) log
+                        | _ -> g, log
+                >>> fun (g, log) ->
+                        match Edges.contains k ((|Key|) r) g with
+                        | false -> Edges.add (k, (|Key|) r, Value Right) g, logEdge k ((|Key|) r) log
+                        | _ -> g, log
 
             (* Graph *)
 
