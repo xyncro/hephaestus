@@ -143,7 +143,7 @@ let main _ =
 
     // Usage
 
-    let result, state = Machine.execute machine state |> Async.RunSynchronously
+    let (result, executionLog), state = Machine.executeLogged machine state |> Async.RunSynchronously
 
     // Wait
 

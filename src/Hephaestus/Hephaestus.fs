@@ -7,7 +7,6 @@ open Anat
 open Anat.Operators
 
 // TODO: Pre/post-condition analysis
-// TODO: Logging/Introspection mechanisms (to be completed for execution - async)
 
 (* Notes
 
@@ -563,13 +562,13 @@ module Machines =
                 Log.operation (
                     operation
                         "decision-constructed"
-                        [ "decision", string k ])
+                        [ "key", string k ])
 
             let private logTerminal k =
                 Log.operation (
                     operation
                         "terminal-constructed"
-                        [ "terminal", string k ])
+                        [ "key", string k ])
 
             let private logEdge k1 k2 =
                 Log.operation (
@@ -659,18 +658,18 @@ module Machines =
             let private logLiteral k v =
                 Log.operation (
                     Operation ("literal-decision-configured",
-                               Map.ofList [ "decision", string k
+                               Map.ofList [ "key", string k
                                             "value", string v ]))
 
             let private logFunction k =
                 Log.operation (
                     Operation ("function-decision-configured",
-                               Map.ofList [ "decision", string k ]))
+                               Map.ofList [ "key", string k ]))
 
             let private logTerminal k =
                 Log.operation (
                     Operation ("terminal-configured",
-                               Map.ofList [ "terminal", string k ]))
+                               Map.ofList [ "key", string k ]))
 
             let private logGraph (g, l) =
                 g, Log.graph (
@@ -749,7 +748,7 @@ module Machines =
                 let private logLiteral k =
                     Log.operation (
                         Operation ("literal-eliminated",
-                                   Map.ofList [ "decision", string k ]))
+                                   Map.ofList [ "key", string k ]))
 
                 let private logGraph (g, l) =
                     g, Log.graph (
@@ -791,7 +790,7 @@ module Machines =
                 let private logUnary k =
                     Log.operation (
                         Operation ("unary-eliminated",
-                                   Map.ofList [ "decision", string k ]))
+                                   Map.ofList [ "key", string k ]))
 
                 let private logGraph (g, l) =
                     g, Log.graph (
@@ -835,7 +834,7 @@ module Machines =
                 let private logSubgraph k =
                     Log.operation (
                         Operation ("subgraph-root-eliminated",
-                                   Map.ofList [ "decision", string k ]))
+                                   Map.ofList [ "key", string k ]))
 
                 let private logGraph (g, l) =
                     g, Log.graph (
@@ -917,21 +916,52 @@ module Machines =
         [<RequireQualifiedAccess>]
         module Execution =
 
-            let private next k e =
+            (* Logging *)
+
+            let private logPass =
+                Log.pass "execution"
+
+            let private logDecision k v =
+                Log.operation (
+                    Operation ("decision",
+                               Map.ofList [ "key", string k
+                                            "value", string v ]))
+
+            let private logTerminal k =
+                Log.operation (
+                    Operation ("terminal",
+                               Map.ofList [ "key", string k ]))
+
+            (* Execution *)
+
+            let private seek k e =
                     Nodes.successors k
                  >> Option.get
                  >> List.pick (function | k, e' when e = e' -> Some k
                                         | _ -> None)
 
-            let rec private traverse k s g =
+            let rec private traverse k s (g, l) =
                 match Nodes.find k g with
-                | k, Node -> traverse (next k Undefined g) s g
-                | k, Decision (Decision.Final f) -> async.Bind (f s, fun (v, s) -> traverse (next k (Value v) g) s g)
-                | _, Terminal (Terminal.Final f) -> f s
+                | k, Node -> first k g l s
+                | k, Decision (Decision.Final f) -> async.Bind (f s, next k g l)
+                | k, Terminal (Terminal.Final f) -> async.Bind (f s, last k l)
                 | _ -> failwith ""
 
-            let execute state (Graph g) =
-                traverse RootKey state g
+            and private first k g l s =
+                traverse (seek k Undefined g) s (g, l)
+
+            and private next k g l (v, s) =
+                traverse (seek k (Value v) g) s (g, logDecision k v l)
+
+            and private last k l (v, s) =
+                async.Return ((v, logTerminal k l), s)
+
+            let private unwrap (Graph g) =
+                g
+
+            let execute state =
+                    unwrap *** logPass
+                >>> traverse RootKey state
 
     (* Prototype
 
@@ -1027,4 +1057,9 @@ module Machines =
             Create.machine configuration (g, Some Log.empty) |> second Option.get
 
         let execute (Machine g) state =
-            Execution.execute state g
+            async.Bind (Execution.execute state (g, None), fun ((v, _), s) ->
+                async.Return (v, s))
+
+        let executeLogged (Machine g) state =
+            async.Bind (Execution.execute state (g, Some Log.empty), fun ((v, l), s) ->
+                async.Return ((v, Option.get l), s))
