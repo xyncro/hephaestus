@@ -643,7 +643,6 @@ module Machines =
                 >>> second (tuple Graph.empty)
                 >>> uncurry graph
                 >>> logGraph
-                >>> first Graph
 
         (* Configuration *)
 
@@ -711,7 +710,6 @@ module Machines =
                     second logPass
                 >>> graph c
                 >>> logGraph
-                >>> first Graph
 
         (* Optimization *)
 
@@ -909,7 +907,17 @@ module Machines =
 
             let internal optimize _ =
                     uncurry passes
-                >>> first Graph
+
+        (* Deconstruction *)
+
+        [<RequireQualifiedAccess>]
+        module Deconstruction =
+
+            let private f (x: Hekate.Graph<Key,Node<_,_,_>,Edge>) =
+                x
+
+            let deconstruct _ =
+                    f *** id
 
         (* Execution *)
 
@@ -994,7 +1002,7 @@ module Machines =
             let prototype _ =
                     first specification
                 >>> Construction.construct ()
-                >>> first Prototype
+                >>> first (Graph >> Prototype)
 
         (* Functions *)
 
@@ -1035,18 +1043,12 @@ module Machines =
 
             (* Functions *)
 
-            let private configure c =
+            let machine c =
                     first graph
                 >>> Configuration.configure c
-
-            let private optimize _ =
-                    first graph
                 >>> Optimization.optimize ()
-
-            let machine c =
-                    configure c
-                >>> optimize ()
-                >>> first Machine
+                >>> Deconstruction.deconstruct ()
+                >>> first (Graph >> Machine)
 
         (* Functions *)
 
