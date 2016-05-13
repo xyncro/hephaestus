@@ -6,6 +6,7 @@ open Aether.Operators
 open Anat
 open Anat.Operators
 
+// TODO: Rework commentary
 // TODO: Pre/post-condition analysis
 
 (* Notes
@@ -126,9 +127,6 @@ module Logs =
      and Pass =
         | Pass of string * Hekate.Graph<Key,Descriptor,DecisionResult option> * Operation list
 
-        static member name_ =
-            (fun (Pass (n, _, _)) -> n), (fun n (Pass (_, g, o)) -> Pass (n, g, o))
-
         static member graph_ =
             (fun (Pass (_, g, _)) -> g), (fun g (Pass (n, _, o)) -> Pass (n, g, o))
 
@@ -138,31 +136,8 @@ module Logs =
      and Descriptor =
         | Descriptor of string * Map<string,string>
 
-        static member name_ =
-            (fun (Descriptor (n, _)) -> n), (fun n (Descriptor (_, p)) -> Descriptor (n, p))
-
-        static member properties_ =
-            (fun (Descriptor (_, p)) -> p), (fun p (Descriptor (n, _)) -> Descriptor (n, p))
-
      and Operation =
         | Operation of string * Map<string,string>
-
-        static member name_ =
-            (fun (Operation (n, _)) -> n), (fun n (Operation (_, p)) -> Operation (n, p))
-
-        static member properties_ =
-            (fun (Operation (_, p)) -> p), (fun p (Operation (n, _)) -> Operation (n, p))
-
-//    (* Constructors *)
-//
-//    let internal pass name graph operations =
-//        Pass (name, graph, operations)
-//
-//    let internal descriptor name pairs =
-//        Descriptor (name, Map.ofList pairs)
-//
-//    let internal operation name pairs =
-//        Operation (name, Map.ofList pairs)
 
     (* Logging
 
@@ -204,7 +179,6 @@ module Logs =
             Option.map (
                 Optic.map operations_ (fun os ->
                     o :: os))
-
 
 (* Specifications
 
@@ -507,123 +481,123 @@ module Prototypes =
         | Decision of ('c -> DecisionValue<'s>)
         | Terminal of ('c -> 's -> Async<'r * 's>)
 
-    (* Construction *)
+    (* Creation *)
 
     [<AutoOpen>]
-    module internal Construction =
+    module internal Creation =
 
-        (* Logging *)
+        (* Construction *)
 
-        let private logPass =
-            Log.pass "construction"
+        [<AutoOpen>]
+        module Construction =
 
-        let private logDecision k =
-            Log.operation (
-                Operation ("decision construction",
-                    Map.ofList [ "key", string k ]))
+            (* Logging *)
 
-        let private logTerminal k =
-            Log.operation (
-                Operation ("terminal construction",
-                    Map.ofList [ "key", string k ]))
+            let private logPass =
+                Log.pass "construction"
 
-        let private logEdge k1 k2 =
-            Log.operation (
-                Operation ("edge construction",
-                    Map.ofList [ "from", string k1
-                                 "to",   string k2 ]))
+            let private logDecision k =
+                Log.operation (
+                    Operation ("decision construction",
+                        Map.ofList [ "key", string k ]))
 
-        let private logGraph (g, l) =
-            g, Log.graph (
-                Nodes.map (fun _ ->
-                    function | Node -> Descriptor ("", Map.empty)
-                             | Decision _ -> Descriptor ("decision", Map.empty)
-                             | Terminal _ -> Descriptor ("terminal", Map.empty)) g) l
+            let private logTerminal k =
+                Log.operation (
+                    Operation ("terminal construction",
+                        Map.ofList [ "key", string k ]))
 
-        (* Construction
+            let private logEdge k1 k2 =
+                Log.operation (
+                    Operation ("edge construction",
+                        Map.ofList [ "from", string k1
+                                     "to",   string k2 ]))
 
-            Functions for constructing a Hephaestus Specification to a graph based
-            representation of the equivalent (unmodified) decision graph, prior
-            to applying instance specific configuration to the graph. *)
+            let private logGraph (g, l) =
+                g, Log.graph (
+                    Nodes.map (fun _ ->
+                        function | Node -> Descriptor ("", Map.empty)
+                                 | Decision _ -> Descriptor ("decision", Map.empty)
+                                 | Terminal _ -> Descriptor ("terminal", Map.empty)) g) l
 
-        (* Nodes *)
+            (* Construction
 
-        let rec private nodes =
-                function | Specification.Decision (k, c, (l, r)) -> decision k c l r
-                         | Specification.Terminal (k, c) -> terminal k c
+                Functions for constructing a Hephaestus Specification to a graph based
+                representation of the equivalent (unmodified) decision graph, prior
+                to applying instance specific configuration to the graph. *)
 
-        and private decision k c l r =
-                nodes l
-            >>> nodes r
-            >>> fun (g, log) ->
-                    match Nodes.contains k g with
-                    | false -> Nodes.add (k, Decision c) g, logDecision k log
-                    | _ -> g, log
+            (* Nodes *)
 
-        and private terminal k c =
-                fun (g, log) ->
-                    match Nodes.contains k g with
-                    | false -> Nodes.add (k, Terminal c) g, logTerminal k log
-                    | _ -> g, log
+            let rec private nodes =
+                    function | Specification.Decision (k, c, (l, r)) -> decision k c l r
+                             | Specification.Terminal (k, c) -> terminal k c
 
-        (* Edges *)
+            and private decision k c l r =
+                    nodes l
+                >>> nodes r
+                >>> fun (g, log) ->
+                        match Nodes.contains k g with
+                        | false -> Nodes.add (k, Decision c) g, logDecision k log
+                        | _ -> g, log
 
-        let rec private edges =
-                function | Specifications.Decision (k, _, (l, r)) -> edge k l r
-                         | Specification.Terminal _ -> id
+            and private terminal k c =
+                    fun (g, log) ->
+                        match Nodes.contains k g with
+                        | false -> Nodes.add (k, Terminal c) g, logTerminal k log
+                        | _ -> g, log
 
-        and private edge k l r =
-                edges l
-            >>> edges r
-            >>> fun (g, log) ->
-                    match Edges.contains k ((|Key|) l) g with
-                    | false -> Edges.add (k, (|Key|) l, Some Left) g, logEdge k ((|Key|) l) log
-                    | _ -> g, log
-            >>> fun (g, log) ->
-                    match Edges.contains k ((|Key|) r) g with
-                    | false -> Edges.add (k, (|Key|) r, Some Right) g, logEdge k ((|Key|) r) log
-                    | _ -> g, log
+            (* Edges *)
 
-        (* Graph *)
+            let rec private edges =
+                    function | Specifications.Decision (k, _, (l, r)) -> edge k l r
+                             | Specification.Terminal _ -> id
 
-        let private graph s =
-                nodes s
-            >>> edges s
-            >>> first (Nodes.add (rootKey, Node))
-            >>> first (Edges.add (rootKey, (|Key|) s, None))
+            and private edge k l r =
+                    edges l
+                >>> edges r
+                >>> fun (g, log) ->
+                        match Edges.contains k ((|Key|) l) g with
+                        | false -> Edges.add (k, (|Key|) l, Some Left) g, logEdge k ((|Key|) l) log
+                        | _ -> g, log
+                >>> fun (g, log) ->
+                        match Edges.contains k ((|Key|) r) g with
+                        | false -> Edges.add (k, (|Key|) r, Some Right) g, logEdge k ((|Key|) r) log
+                        | _ -> g, log
 
-        (* Construct *)
+            (* Graph *)
 
-        let construct _ =
-                second logPass
-            >>> second (tuple Graph.empty)
-            >>> uncurry graph
-            >>> logGraph
+            let private graph s =
+                    nodes s
+                >>> edges s
+                >>> first (Nodes.add (rootKey, Node))
+                >>> first (Edges.add (rootKey, (|Key|) s, None))
+
+            (* Construct *)
+
+            let construct _ =
+                    second logPass
+                >>> second (tuple Graph.empty)
+                >>> uncurry graph
+                >>> logGraph
+
+        (* Creation*)
+
+        let create _ =
+                first (function | { Specification = s } -> s)
+            >>> construct ()
+            >>> first Prototype
 
     (* Prototype *)
 
     [<RequireQualifiedAccess>]
     module Prototype =
 
-        (* Patterns *)
-
-        let private specification =
-                function | { Specification = s } -> s
-
-        (* Prototype *)
-
-        let private prototype _ =
-                first specification
-            >>> construct ()
-            >>> first Prototype
-
-        (* Create *)
-
-        let create model =
-            prototype () (model, None) |> fst
+        (* Creation *)
 
         let createLogged model =
-            prototype () (model, Some Log.empty) |> second Option.get
+            create () (model, Some Log.empty) |> second Option.get
+
+        let create model =
+            create () (model, None) |> fst
 
 (* Machines *)
 
@@ -636,289 +610,341 @@ module Machines =
         | Decision of Key * ('s -> Async<DecisionResult * 's>) * Pair<Machine<'r,'s>>
         | Terminal of Key * ('s -> Async<'r * 's>)
 
-    (* Configuration *)
+    (* Creation *)
 
     [<AutoOpen>]
-    module internal Configuration =
+    module internal Creation =
 
-        (* Types *)
+        (* Configuration *)
 
-        type Configured<'r,'s> =
-            | Configured of Hekate.Graph<Key,Node<'r,'s>,DecisionResult option>
+        [<AutoOpen>]
+        module Configuration =
 
-         and Node<'r,'s> =
-            | Node
-            | Decision of DecisionValue<'s>
-            | Terminal of ('s -> Async<'r * 's>)
+            (* Types *)
 
-        (* Logging *)
+            type Configured<'r,'s> =
+                | Configured of Hekate.Graph<Key,Node<'r,'s>,DecisionResult option>
 
-        let private logPass =
-            Log.pass "configuration"
-
-        let private logLiteral k v =
-            Log.operation (
-                Operation ("decision literal configuration",
-                            Map.ofList [ "key", string k
-                                         "value", string v ]))
-
-        let private logFunction k =
-            Log.operation (
-                Operation ("decision function configuration",
-                            Map.ofList [ "key", string k ]))
-
-        let private logTerminal k =
-            Log.operation (
-                Operation ("terminal configuration",
-                            Map.ofList [ "key", string k ]))
-
-        let private logGraph (g, l) =
-            g, Log.graph (
-                Nodes.map (fun _ ->
-                    function | Node -> Descriptor ("", Map.empty)
-                             | Decision (Literal l) -> Descriptor ("decision literal", Map.ofList [ "result", string l ])
-                             | Decision _ -> Descriptor ("decision function", Map.empty)
-                             | Terminal _ -> Descriptor ("terminal", Map.empty)) g) l
-
-        (* Configuration
-
-            Configuration of a graph, involving the application of
-            configurators to given node types, using supplied configuration,
-            resulting in literal or function decisions. Reporting is
-            generated as part of the process (see above). *)
-
-        (* Functions *)
-
-        let private decision l k =
-            function | Literal v -> Decision (Literal v), logLiteral k v l
-                     | Function f -> Decision (Function f), logFunction k l
-
-        let private terminal l k =
-            function | f -> Terminal f, logTerminal k l
-
-        let private nodes c l k =
-            function | Prototypes.Decision f -> decision l k (f c)
-                     | Prototypes.Terminal f -> terminal l k (f c)
-                     | Prototypes.Node -> Node, l
-
-        let private graph c =
-                uncurry (flip (Nodes.mapFold (nodes c)))
-             >> swap
-
-        (* Configure *)
-
-        let configure c =
-                second logPass
-            >>> graph c
-            >>> logGraph
-
-    (* Optimization *)
-
-    [<AutoOpen>]
-    module internal Optimization =
-
-        (* Types *)
-
-        type Optimized<'r,'s> =
-            | Optimized of Hekate.Graph<Key,Node<'r,'s>,DecisionResult option>
-
-         and Node<'r,'s> =
-            | Node
-            | Decision of ('s -> Async<DecisionResult * 's>)
-            | Terminal of ('s -> Async<'r * 's>)
-
-        (* Common *)
-
-        let private outward k v =
-                Nodes.outward k
-             >> Option.get
-             >> List.pick (function | _, t, Some v' when v = v' -> Some t
-                                    | _ -> None)
-
-        let private inward k t =
-                Nodes.inward k
-             >> Option.get
-             >> List.map (fun (f, _, v) -> (f, t, v))
-
-        let private reconnect k v =
-                ((outward k v &&& id) >>> uncurry (inward k)) &&& id >>> uncurry Edges.addMany
-            >>> Nodes.remove k
-
-        (* Literal Elimination *)
-
-        [<RequireQualifiedAccess>]
-        module private LiteralElimination =
+             and Node<'r,'s> =
+                | Node
+                | Decision of DecisionValue<'s>
+                | Terminal of ('s -> Async<'r * 's>)
 
             (* Logging *)
 
             let private logPass =
-                Log.pass "literal elimination optimization"
+                Log.pass "configuration"
 
-            let private logLiteral k =
+            let private logLiteral k v =
                 Log.operation (
-                    Operation ("literal elimination",
-                               Map.ofList [ "key", string k ]))
+                    Operation ("decision literal configuration",
+                                Map.ofList [ "key", string k
+                                             "value", string v ]))
+
+            let private logFunction k =
+                Log.operation (
+                    Operation ("decision function configuration",
+                                Map.ofList [ "key", string k ]))
+
+            let private logTerminal k =
+                Log.operation (
+                    Operation ("terminal configuration",
+                                Map.ofList [ "key", string k ]))
 
             let private logGraph (g, l) =
                 g, Log.graph (
                     Nodes.map (fun _ ->
                         function | Node -> Descriptor ("", Map.empty)
-                                 | Decision _ -> Descriptor ("decision", Map.empty)
+                                 | Decision (Literal l) -> Descriptor ("literal", Map.ofList [ "result", string l ])
+                                 | Decision _ -> Descriptor ("function", Map.empty)
                                  | Terminal _ -> Descriptor ("terminal", Map.empty)) g) l
 
-            (* Elimination *)
+            (* Configuration
 
-            let rec private eliminateLiterals (g, l) =
-                match findLiteral g with
-                | Some (k, v) -> eliminateLiterals (reconnect k v g, logLiteral k l)
-                | _ -> g, l
+                Configuration of a graph, involving the application of
+                configurators to given node types, using supplied configuration,
+                resulting in literal or function decisions. Reporting is
+                generated as part of the process (see above). *)
 
-            and private findLiteral g =
-                Nodes.toList g
-                |> List.tryPick (function | k, Configuration.Decision (Literal v) -> Some (k, v)
-                                          | _ -> None)
+            (* Functions *)
 
-            (* Mapping *)
+            let private decision l k =
+                function | Literal v -> Decision (Literal v), logLiteral k v l
+                         | Function f -> Decision (Function f), logFunction k l
 
-            let private map g =
-                Nodes.map (fun _ n ->
-                    match n with
-                    | Configuration.Node -> Node
-                    | Configuration.Decision (Function v) -> Decision v
-                    | Configuration.Terminal (v) -> Terminal v
-                    | _ -> failwith "") g
+            let private terminal l k =
+                function | f -> Terminal f, logTerminal k l
 
-            (* Optimization *)
+            let private nodes c l k =
+                function | Prototypes.Decision f -> decision l k (f c)
+                         | Prototypes.Terminal f -> terminal l k (f c)
+                         | Prototypes.Node -> Node, l
 
-            let optimize _ =
+            let private graph c =
+                    uncurry (flip (Nodes.mapFold (nodes c)))
+                 >> swap
+
+            (* Configure *)
+
+            let configure c =
                     second logPass
-                >>> eliminateLiterals
-                >>> first map
-                >>> logGraph
-
-        (* Unary Elimination *)
-
-        [<RequireQualifiedAccess>]
-        module private UnaryElimination =
-
-            (* Logging *)
-
-            let private logPass =
-                Log.pass "unary elimination optimization"
-
-            let private logUnary k =
-                Log.operation (
-                    Operation ("unary elimination",
-                               Map.ofList [ "key", string k ]))
-
-            let private logGraph (g, l) =
-                g, Log.graph (
-                    Nodes.map (fun _ ->
-                        function | Node -> Descriptor ("", Map.empty)
-                                 | Decision _ -> Descriptor ("decision", Map.empty)
-                                 | Terminal _ -> Descriptor ("terminal", Map.empty)) g) l
-
-            (* Elimination *)
-
-            let rec private eliminateUnary (g, l) =
-                match findUnary g with
-                | Some (k, v) -> eliminateUnary (reconnect k v g, logUnary k l)
-                | _ -> g, l
-
-            and private findUnary g =
-                Nodes.toList g
-                |> List.tryPick (fun (k, _) ->
-                    match Nodes.outward k g with
-                    | Some ([ (_, _, Some v) ]) when k <> rootKey -> Some (k, v)
-                    | _ -> None)
-
-            (* Optimization *)
-
-            let optimize _ =
-                    second logPass
-                >>> eliminateUnary
-                >>> logGraph
-
-        (* Subgraph Elimination *)
-
-        [<RequireQualifiedAccess>]
-        module private SubgraphElimination =
-
-            (* Logging *)
-
-            let private logPass =
-                Log.pass "subgraph elimination optimization"
-
-            let private logSubgraph k =
-                Log.operation (
-                    Operation ("subgraph elimination",
-                               Map.ofList [ "key", string k ]))
-
-            let private logGraph (g, l) =
-                g, Log.graph (
-                    Nodes.map (fun _ ->
-                        function | Node -> Descriptor ("", Map.empty)
-                                 | Decision (_) -> Descriptor ("decision", Map.empty)
-                                 | Terminal (_) -> Descriptor ("terminal", Map.empty)) g) l
-
-            (* Elimination *)
-
-            let rec private eliminateSubgraphs (graph, l) =
-                match findSubgraph graph with
-                | Some k -> eliminateSubgraphs (Nodes.remove k graph, logSubgraph k l)
-                | _ -> graph, l
-
-            and private findSubgraph graph =
-                Nodes.toList graph
-                |> List.tryPick (function | k, _ when k = rootKey -> None
-                                          | k, _ when Nodes.inwardDegree k graph = Some 0 -> Some k
-                                          | _ -> None)
-
-            (* Optimization *)
-
-            let optimize _ =
-                    second logPass
-                >>> eliminateSubgraphs
+                >>> graph c
                 >>> logGraph
 
         (* Optimization *)
 
-        let private optimizations g =
-                tuple g
-             >> LiteralElimination.optimize ()
-             >> UnaryElimination.optimize ()
-             >> SubgraphElimination.optimize ()
+        [<AutoOpen>]
+        module Optimization =
 
-        let optimize _ =
-                uncurry optimizations
+            (* Types *)
 
-    (* Deconstruction *)
+            type Optimized<'r,'s> =
+                | Optimized of Hekate.Graph<Key,Node<'r,'s>,DecisionResult option>
+
+             and Node<'r,'s> =
+                | Node
+                | Decision of ('s -> Async<DecisionResult * 's>)
+                | Terminal of ('s -> Async<'r * 's>)
+
+            (* Logging *)
+
+            let private logGraph (g, l) =
+                g, Log.graph (
+                    Nodes.map (fun _ ->
+                        function | Node -> Descriptor ("", Map.empty)
+                                 | Decision _ -> Descriptor ("decision", Map.empty)
+                                 | Terminal _ -> Descriptor ("terminal", Map.empty)) g) l
+
+            (* Common *)
+
+            let private outward k v =
+                    Nodes.outward k
+                 >> Option.get
+                 >> List.pick (function | _, t, Some v' when v = v' -> Some t
+                                        | _ -> None)
+
+            let private inward k t =
+                    Nodes.inward k
+                 >> Option.get
+                 >> List.map (fun (f, _, v) -> (f, t, v))
+
+            let private reconnect k v =
+                    ((outward k v &&& id) >>> uncurry (inward k)) &&& id >>> uncurry Edges.addMany
+                >>> Nodes.remove k
+
+            (* Literal Elimination *)
+
+            [<RequireQualifiedAccess>]
+            module private LiteralElimination =
+
+                (* Logging *)
+
+                let private logPass =
+                    Log.pass "literal elimination optimization"
+
+                let private logLiteral k =
+                    Log.operation (
+                        Operation ("literal elimination",
+                                   Map.ofList [ "key", string k ]))
+
+                (* Elimination *)
+
+                let rec private eliminateLiterals (g, l) =
+                    match findLiteral g with
+                    | Some (k, v) -> eliminateLiterals (reconnect k v g, logLiteral k l)
+                    | _ -> g, l
+
+                and private findLiteral g =
+                    Nodes.toList g
+                    |> List.tryPick (function | k, Configuration.Decision (Literal v) -> Some (k, v)
+                                              | _ -> None)
+
+                (* Mapping *)
+
+                let private map g =
+                    Nodes.map (fun _ n ->
+                        match n with
+                        | Configuration.Node -> Node
+                        | Configuration.Decision (Function v) -> Decision v
+                        | Configuration.Terminal (v) -> Terminal v
+                        | _ -> failwith "") g
+
+                (* Optimization *)
+
+                let optimize _ =
+                        second logPass
+                    >>> eliminateLiterals
+                    >>> first map
+                    >>> logGraph
+
+            (* Unary Elimination *)
+
+            [<RequireQualifiedAccess>]
+            module UnaryElimination =
+
+                (* Logging *)
+
+                let private logPass =
+                    Log.pass "unary elimination optimization"
+
+                let private logUnary k =
+                    Log.operation (
+                        Operation ("unary elimination",
+                                   Map.ofList [ "key", string k ]))
+
+                (* Elimination *)
+
+                let rec private eliminateUnary (g, l) =
+                    match findUnary g with
+                    | Some (k, v) -> eliminateUnary (reconnect k v g, logUnary k l)
+                    | _ -> g, l
+
+                and private findUnary g =
+                    Nodes.toList g
+                    |> List.tryPick (fun (k, _) ->
+                        match Nodes.outward k g with
+                        | Some ([ (_, _, Some v) ]) when k <> rootKey -> Some (k, v)
+                        | _ -> None)
+
+                (* Optimization *)
+
+                let optimize _ =
+                        second logPass
+                    >>> eliminateUnary
+                    >>> logGraph
+
+            (* Subgraph Elimination *)
+
+            [<RequireQualifiedAccess>]
+            module private SubgraphElimination =
+
+                (* Logging *)
+
+                let private logPass =
+                    Log.pass "subgraph elimination optimization"
+
+                let private logSubgraph k =
+                    Log.operation (
+                        Operation ("subgraph elimination",
+                                   Map.ofList [ "key", string k ]))
+
+                (* Elimination *)
+
+                let rec private eliminateSubgraphs (graph, l) =
+                    match findSubgraph graph with
+                    | Some k -> eliminateSubgraphs (Nodes.remove k graph, logSubgraph k l)
+                    | _ -> graph, l
+
+                and private findSubgraph graph =
+                    Nodes.toList graph
+                    |> List.tryPick (function | k, _ when k = rootKey -> None
+                                              | k, _ when Nodes.inwardDegree k graph = Some 0 -> Some k
+                                              | _ -> None)
+
+                (* Optimization *)
+
+                let optimize _ =
+                        second logPass
+                    >>> eliminateSubgraphs
+                    >>> logGraph
+
+            (* Optimization *)
+
+            let private optimizations g =
+                    tuple g
+                 >> LiteralElimination.optimize ()
+                 >> UnaryElimination.optimize ()
+                 >> SubgraphElimination.optimize ()
+
+            let optimize _ =
+                    uncurry optimizations
+
+        (* Deconstruction *)
+
+        [<AutoOpen>]
+        module Deconstruction =
+
+            let private find k e =
+                    Nodes.successors k
+                 >> Option.get
+                 >> List.pick (function | k, e' when e = e' -> Some k
+                                        | _ -> None)
+
+            let rec private machine k g =
+                match Nodes.find k g with
+                | k, Optimization.Decision f -> decision k f g
+                | k, Optimization.Terminal f -> terminal k f
+                | _ -> failwith ""
+
+            and private decision k f g =
+                Machine.Decision (k, f,
+                    ((machine (find k (Some Left) g) g),
+                     (machine (find k (Some Right) g) g)))
+
+            and private terminal k f =
+                Machine.Terminal (k, f)
+
+            let deconstruct _ =
+                    (fun g -> machine (find rootKey None g) g) *** id
+
+        (* Creation *)
+
+        let create c =
+                first (function | Prototype.Prototype p -> p)
+            >>> configure c
+            >>> optimize ()
+            >>> deconstruct ()
+
+    (* Execution *)
 
     [<AutoOpen>]
-    module internal Deconstruction =
+    module internal Execution =
 
-        let private find k e =
-                Nodes.successors k
-             >> Option.get
-             >> List.pick (function | k, e' when e = e' -> Some k
-                                    | _ -> None)
+        (* Evaluation *)
 
-        let rec private machine k g =
-            match Nodes.find k g with
-            | k, Optimization.Decision f -> decision k f g
-            | k, Optimization.Terminal f -> terminal k f
-            | _ -> failwith ""
+        [<AutoOpen>]
+        module Evaluation =
 
-        and private decision k f g =
-            Machine.Decision (k, f,
-                ((machine (find k (Some Left) g) g),
-                 (machine (find k (Some Right) g) g)))
+            (* Logging *)
 
-        and private terminal k f =
-            Machine.Terminal (k, f)
+            let private logPass =
+                Log.pass "evaluation"
 
-        let deconstruct _ =
-                (fun g -> machine (find rootKey None g) g) *** id
+            let private logDecision k v =
+                Log.operation (
+                    Operation ("decision",
+                               Map.ofList [ "key", string k
+                                            "value", string v ]))
+
+            let private logTerminal k =
+                Log.operation (
+                    Operation ("terminal",
+                               Map.ofList [ "key", string k ]))
+
+            (* Evaluation *)
+
+            let rec private eval s =
+                function | Machine.Decision (k, f, p), l -> decision s k f p l
+                         | Machine.Terminal (k, f), l -> terminal s k f l
+
+            and private decision s k f p l =
+                async.Bind (f s,
+                    function | Left, s' -> eval s' (fst p, logDecision k Left l)
+                             | Right, s' -> eval s' (snd p, logDecision k Right l))
+
+            and private terminal s k f l =
+                async.Bind (f s,
+                    fun (v, s) ->
+                        async.Return ((v, s), logTerminal k l))
+
+            let evaluate s =
+                    second logPass
+                >>> eval s
+
+        (* Execution *)
+
+        let execute s =
+                evaluate s
 
     (* Machine
 
@@ -934,170 +960,22 @@ module Machines =
     [<RequireQualifiedAccess>]
     module Machine =
 
-        (* Patterns *)
-
-        let private graph =
-                function | Prototype.Prototype p -> p
-
         (* Creation *)
 
-        let private machine c =
-                first graph
-            >>> configure c
-            >>> optimize ()
-            >>> deconstruct ()
+        let createLogged prototype configuration =
+            create configuration (prototype, Some Log.empty) |> second Option.get
 
         let create prototype configuration =
-            machine configuration (prototype, None) |> fst
+            create configuration (prototype, None) |> fst
 
-        let createLogged prototype configuration =
-            machine configuration (prototype, Some Log.empty) |> second Option.get
+        (* Execution *)
 
-//        let execute (Machine g) state =
-//            async.Bind (Execution.execute state (g, None), fun ((v, _), s) ->
-//                async.Return (v, s))
-//
-//        let executeLogged (Machine g) state =
-//            async.Bind (Execution.execute state (g, Some Log.empty), fun ((v, l), s) ->
-//                async.Return ((v, Option.get l), s))
-//
-//
-//    (* Structures
-//
-//       The Hephaestus Graph implementation, turning the logical Hephaestus
-//       Specification representation of a decision graph in to an optimized
-//       executable form (given appropriate configuration data to configure a
-//       graph before optimization).
-//
-//       The resultant graph effectively behaves as an Async State monad while
-//       being transparent and modifiable - potentially supporting differing
-//       forms of optimization, error handling etc. via mapping of the graph
-//       (including a possible plugin model which would act as a "plugin-based
-//       graph compiler").
-//
-//       The graph implementation is not a user-facing API (although the types
-//       are exposed), and is wrapped by the Hephaestus Prototype and Machine
-//       APIs. *)
-//
-//    [<AutoOpen>]
-//    module Structures =
-//
-//        (* Keys *)
-//
-//        let RootKey =
-//            Key [ "root" ]
-//
-//        (* Types
-//
-//           Types representing the graph underlying the machine with nodes of
-//           varying types representing the different states in which the graph
-//           may exist during construction, configuration, optimization, etc.
-//           (effectively compilation passes).
-//
-//           Types for storing reasonably structured logs of the varying passes
-//           are defined, along with a simple representation of the graphs after
-//           each pass. *)
-//
-//        (* Graph *)
-//
-//        type Graph<'c,'r,'s> =
-//            | Graph of Hekate.Graph<Key,Node<'c,'r,'s>,Edge>
-//
-//         and Node<'c,'r,'s> =
-//            | Node
-//            | Decision of Decision<'c,'r,'s>
-//            | Terminal of Terminal<'c,'r,'s>
-//
-//         and Decision<'c,'r,'s> =
-//            | Unconfigured of ('c -> DecisionValue<'s>)
-//            | Configured of DecisionValue<'s>
-//            | Final of ('s -> Async<DecisionResult * 's>)
-//
-//         and Terminal<'c,'r,'s> =
-//            | Unconfigured of ('c -> 's -> Async<'r * 's>)
-//            | Final of ('s -> Async<'r * 's>)
-//
-//         and Edge =
-//            | Undefined
-//            | Value of DecisionResult
-//
-//        (* Deconstruction *)
-//
-//        [<RequireQualifiedAccess>]
-//        module Deconstruction =
-//
-//            let private find k e g =
-//                Nodes.successors k g
-//                |> Option.get
-//                |> List.pick (function | k, e' when e = e' -> Some k
-//                                       | _ -> None)
-//
-//            let rec private machine k g =
-//                match Nodes.find k g with
-//                | k, Node.Decision (Decision.Final f) -> decision k f g
-//                | k, Node.Terminal (Terminal.Final f) -> terminal k f
-//                | _ -> failwith ""
-//
-//            and private decision k f g =
-//                Machine.Decision (k, f,
-//                    ((machine (find k (Value Left) g) g),
-//                     (machine (find k (Value Right) g) g)))
-//
-//            and private terminal k f =
-//                Machine.Terminal (k, f)
-//
-//            let deconstruct _ =
-//                    (fun g -> machine (find RootKey Undefined g) g) *** id
-//
-//        (* Execution *)
-//
-//        [<RequireQualifiedAccess>]
-//        module Execution =
-//
-//            (* Logging *)
-//
-//            let private logPass =
-//                Log.pass "execution"
-//
-//            let private logDecision k v =
-//                Log.operation (
-//                    Operation ("decision",
-//                               Map.ofList [ "key", string k
-//                                            "value", string v ]))
-//
-//            let private logTerminal k =
-//                Log.operation (
-//                    Operation ("terminal",
-//                               Map.ofList [ "key", string k ]))
-//
-//            (* Execution *)
-//
-//            let private seek k e =
-//                    Nodes.successors k
-//                 >> Option.get
-//                 >> List.pick (function | k, e' when e = e' -> Some k
-//                                        | _ -> None)
-//
-//            let rec private traverse k s (g, l) =
-//                match Nodes.find k g with
-//                | k, Node -> first k g l s
-//                | k, Decision (Decision.Final f) -> async.Bind (f s, next k g l)
-//                | k, Terminal (Terminal.Final f) -> async.Bind (f s, last k l)
-//                | _ -> failwith ""
-//
-//            and private first k g l s =
-//                traverse (seek k Undefined g) s (g, l)
-//
-//            and private next k g l (v, s) =
-//                traverse (seek k (Value v) g) s (g, logDecision k v l)
-//
-//            and private last k l (v, s) =
-//                async.Return ((v, logTerminal k l), s)
-//
-//            let private unwrap (Graph g) =
-//                g
-//
-//            let execute state =
-//                    unwrap *** logPass
-//                >>> traverse RootKey state
-//
+        let executeLogged machine state =
+            async.Bind (execute state (machine, Some Log.empty),
+                fun ((v, s), l) ->
+                    async.Return ((v, Option.get l), s))
+
+        let execute machine state =
+            async.Bind (execute state (machine, None),
+                fun ((v, s), _) ->
+                    async.Return (v, s))
