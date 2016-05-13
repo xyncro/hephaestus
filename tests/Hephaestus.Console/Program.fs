@@ -141,9 +141,9 @@ let main _ =
 
     let machine, machineLog = Machine.createLogged prototype configuration
 
-    // Usage
-
-    let (result, executionLog), state = Machine.executeLogged machine state |> Async.RunSynchronously
+//    // Usage
+//
+//    let (result, executionLog), state = Machine.executeLogged machine state |> Async.RunSynchronously
 
     // Wait
 
