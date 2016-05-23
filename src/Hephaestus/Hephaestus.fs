@@ -870,22 +870,30 @@ module Machines =
                  >> List.pick (function | k, e' when e = e' -> Some k
                                         | _ -> None)
 
-            let rec private machine k g =
-                match Nodes.find k g with
-                | k, Optimization.Decision f -> decision k f g
-                | k, Optimization.Terminal f -> terminal k f
-                | _ -> failwith ""
+            let rec private machine k g cache =
+                match Map.tryFind k cache with
+                | Some m ->
+                    m, cache
+                | _ ->
+                    match Nodes.find k g with
+                    | _, Optimization.Decision f -> decision k f g cache
+                    | _, Optimization.Terminal f -> terminal k f cache
+                    | _ -> failwith ""
 
-            and private decision k f g =
-                Machine.Decision (k, f,
-                    ((machine (find k (Some Left) g) g),
-                     (machine (find k (Some Right) g) g)))
+            and private decision k f g cache =
+                let l, cache = machine (find k (Some Left) g) g cache
+                let r, cache = machine (find k (Some Right) g) g cache
+                let m = Machine.Decision (k, f, (l, r))
 
-            and private terminal k f =
-                Machine.Terminal (k, f)
+                m, Map.add k m cache
+
+            and private terminal k f cache =
+                let m = Machine.Terminal (k, f)
+
+                m, Map.add k m cache
 
             let deconstruct _ =
-                    (fun g -> machine (find rootKey None g) g) *** id
+                    (fun g -> fst (machine (find rootKey None g) g Map.empty)) *** id
 
         (* Creation *)
 
