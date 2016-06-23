@@ -1,6 +1,7 @@
 ﻿module Hephaestus.Console
 
 open Hephaestus
+open Hopac
 
 (* Classifications *)
 
@@ -25,7 +26,7 @@ type HttpState =
 
 let response name =
     Specification.Terminal.create name (fun _ s ->
-        async {
+        job {
             printfn "%A Method: %s" name s.Method
             return (), s })
 
@@ -49,7 +50,7 @@ module HttpCore =
                 Literal Right
             | Some available ->
                 Function (fun state ->
-                    async {
+                    job {
                         return match available with
                                | true -> Right, state
                                | _ -> Left, state }))
@@ -92,7 +93,7 @@ module HttpOptions =
     let private methodOptions =
         decision "method.options" (fun _ ->
             Function (fun state ->
-                async {
+                job {
                     return match state.Method with
                            | m when m = "options" -> Right, state
                            | _ -> Left, state }))
@@ -143,7 +144,7 @@ let main _ =
 
     // Usage
 
-    let (result, executionLog), state = Machine.executeLogged machine state |> Async.RunSynchronously
+    let (result, executionLog), state = Machine.executeLogged machine state |> Job.Global.run
 
     // Wait
 

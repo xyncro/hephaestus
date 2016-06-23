@@ -5,6 +5,7 @@ open Aether
 open Aether.Operators
 open Anat
 open Anat.Operators
+open Hopac
 
 // TODO: Rework commentary
 // TODO: Pre/post-condition analysis
@@ -88,10 +89,10 @@ type Key =
         (function | Key x -> String.Join (".", Array.ofList x)) x
 
 type DecisionValue<'s> =
-    | Function of ('s -> Async<DecisionResult * 's>)
+    | Function of ('s -> Job<DecisionResult * 's>)
     | Literal of DecisionResult
 
-    static member function_ : Epimorphism<DecisionValue<'s>,('s -> Async<DecisionResult * 's>)> =
+    static member function_ : Epimorphism<DecisionValue<'s>,('s -> Job<DecisionResult * 's>)> =
         (function | Function f -> Some f
                   | _ -> None), (Function)
 
@@ -202,7 +203,7 @@ module Specifications =
 
     type Specification<'c,'r,'s> =
         | Decision of Key * ('c -> DecisionValue<'s>) * Pair<Specification<'c,'r,'s>>
-        | Terminal of Key * ('c -> 's -> Async<'r * 's>)
+        | Terminal of Key * ('c -> 's -> Job<'r * 's>)
 
         static member decision_ =
             (function | Decision (k, c, s) -> Some (k, c, s)
@@ -249,7 +250,7 @@ module Specifications =
 
             /// Create a new unnamed terminal with a no-op Hephaestus function.
             let empty<'c,'r,'s> =
-                Specification<'c,'r,'s>.Terminal (Key [], fun _ s -> async.Return (Unchecked.defaultof<'r>, s))
+                Specification<'c,'r,'s>.Terminal (Key [], fun _ s -> Job.result (Unchecked.defaultof<'r>, s))
 
         (* Decisions
 
@@ -479,7 +480,7 @@ module Prototypes =
      and Node<'c,'r,'s> =
         | Node
         | Decision of ('c -> DecisionValue<'s>)
-        | Terminal of ('c -> 's -> Async<'r * 's>)
+        | Terminal of ('c -> 's -> Job<'r * 's>)
 
     (* Creation *)
 
@@ -607,8 +608,8 @@ module Machines =
     (* Types *)
 
     type Machine<'r,'s> =
-        | Decision of Key * ('s -> Async<DecisionResult * 's>) * Pair<Machine<'r,'s>>
-        | Terminal of Key * ('s -> Async<'r * 's>)
+        | Decision of Key * ('s -> Job<DecisionResult * 's>) * Pair<Machine<'r,'s>>
+        | Terminal of Key * ('s -> Job<'r * 's>)
 
     (* Creation *)
 
@@ -628,7 +629,7 @@ module Machines =
              and Node<'r,'s> =
                 | Node
                 | Decision of DecisionValue<'s>
-                | Terminal of ('s -> Async<'r * 's>)
+                | Terminal of ('s -> Job<'r * 's>)
 
             (* Logging *)
 
@@ -703,8 +704,8 @@ module Machines =
 
              and Node<'r,'s> =
                 | Node
-                | Decision of ('s -> Async<DecisionResult * 's>)
-                | Terminal of ('s -> Async<'r * 's>)
+                | Decision of ('s -> Job<DecisionResult * 's>)
+                | Terminal of ('s -> Job<'r * 's>)
 
             (* Logging *)
 
@@ -936,14 +937,13 @@ module Machines =
                          | Machine.Terminal (k, f), l -> terminal s k f l
 
             and private decision s k f p l =
-                async.Bind (f s,
+                Job.bind (
                     function | Left, s' -> eval s' (fst p, logDecision k Left l)
-                             | Right, s' -> eval s' (snd p, logDecision k Right l))
+                             | Right, s' -> eval s' (snd p, logDecision k Right l)) (f s)
 
             and private terminal s k f l =
-                async.Bind (f s,
-                    fun (v, s) ->
-                        async.Return ((v, s), logTerminal k l))
+                Job.bind (fun (v, s) ->
+                    Job.result ((v, s), logTerminal k l)) (f s)
 
             let evaluate s =
                     second logPass
@@ -979,11 +979,9 @@ module Machines =
         (* Execution *)
 
         let executeLogged machine state =
-            async.Bind (execute state (machine, Some Log.empty),
-                fun ((v, s), l) ->
-                    async.Return ((v, Option.get l), s))
+            Job.bind (fun ((v, s), l) ->
+                Job.result ((v, Option.get l), s)) (execute state (machine, Some Log.empty))
 
         let execute machine state =
-            async.Bind (execute state (machine, None),
-                fun ((v, s), _) ->
-                    async.Return (v, s))
+            Job.bind (fun ((v, s), _) ->
+                Job.result (v, s)) (execute state (machine, None))

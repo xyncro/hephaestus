@@ -35,18 +35,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{E6606DCC
 		tests\Hephaestus.Console\Hephaestus.Console.fsproj.paket.references = tests\Hephaestus.Console\Hephaestus.Console.fsproj.paket.references
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "targets", "targets", "{88E78EEB-533E-4747-994C-FDE749A37DEA}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Hephaestus.Net35", "targets\Hephaestus.Net35\Hephaestus.Net35.fsproj", "{394ACD70-7650-4795-8E2D-E9E3416C53D0}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "targets", "targets", "{253082E5-C380-4FC3-8B12-D3D67065F8F0}"
-	ProjectSection(SolutionItems) = preProject
-		targets\Hephaestus.Net35\Hephaestus.Net35.fsproj.paket.references = targets\Hephaestus.Net35\Hephaestus.Net35.fsproj.paket.references
-		targets\Hephaestus.Profile259\Hephaestus.Profile259.fsproj.paket.references = targets\Hephaestus.Profile259\Hephaestus.Profile259.fsproj.paket.references
-	EndProjectSection
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Hephaestus.Profile259", "targets\Hephaestus.Profile259\Hephaestus.Profile259.fsproj", "{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}"
-EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Hephaestus.Tests", "tests\Hephaestus.Tests\Hephaestus.Tests.fsproj", "{CC1D3821-D718-49AC-B349-E4A0B114EC91}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dependencies", "dependencies", "{0742FAC2-0522-4A7D-8D6B-22FDBBD9A33B}"
@@ -69,14 +57,6 @@ Global
 		{FFD26322-C55F-4A19-B932-9879C111599C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FFD26322-C55F-4A19-B932-9879C111599C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FFD26322-C55F-4A19-B932-9879C111599C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{394ACD70-7650-4795-8E2D-E9E3416C53D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{394ACD70-7650-4795-8E2D-E9E3416C53D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{394ACD70-7650-4795-8E2D-E9E3416C53D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{394ACD70-7650-4795-8E2D-E9E3416C53D0}.Release|Any CPU.Build.0 = Release|Any CPU
-		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{CC1D3821-D718-49AC-B349-E4A0B114EC91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CC1D3821-D718-49AC-B349-E4A0B114EC91}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CC1D3821-D718-49AC-B349-E4A0B114EC91}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -93,9 +73,6 @@ Global
 		{7C3CAB40-1AF3-4DD1-BCAB-8BF1AD80F710} = {A68E377A-F444-4B33-AD6B-9C3DEFE5811F}
 		{FFD26322-C55F-4A19-B932-9879C111599C} = {E278E51D-AB26-4B0C-B14B-AEA9D0D58FB7}
 		{E6606DCC-B557-47D9-A7E9-1645CD897DF7} = {0742FAC2-0522-4A7D-8D6B-22FDBBD9A33B}
-		{394ACD70-7650-4795-8E2D-E9E3416C53D0} = {88E78EEB-533E-4747-994C-FDE749A37DEA}
-		{253082E5-C380-4FC3-8B12-D3D67065F8F0} = {0742FAC2-0522-4A7D-8D6B-22FDBBD9A33B}
-		{592CE0D6-4554-42BB-B5ED-723D1D0AD6F1} = {88E78EEB-533E-4747-994C-FDE749A37DEA}
 		{CC1D3821-D718-49AC-B349-E4A0B114EC91} = {E278E51D-AB26-4B0C-B14B-AEA9D0D58FB7}
 		{0742FAC2-0522-4A7D-8D6B-22FDBBD9A33B} = {5844D341-72F0-423F-BC21-92EA62610D0B}
 	EndGlobalSection
