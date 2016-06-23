@@ -2,13 +2,16 @@ NUGET
   remote: http://www.nuget.org/api/v2
     Aether (8.1.2)
     Anat (1.0)
+    FSharp.Core (4.0.0.1)
     Hekate (3.2)
       Aether (>= 8.0.2 < 9.0)
+    Hopac (0.2.1)
+      FSharp.Core (>= 3.1.2.5)
 
 GROUP Build
 NUGET
   remote: http://www.nuget.org/api/v2
-    FAKE (4.28)
+    FAKE (4.29.2)
 GITHUB
   remote: xyncro/build
     build.fsx (589ed49e68b51d7de9e9de9be1adc30e26ce534d)
