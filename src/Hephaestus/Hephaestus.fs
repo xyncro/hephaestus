@@ -622,10 +622,7 @@ module Machines =
 
             (* Types *)
 
-            type Configured<'r,'s> =
-                | Configured of Hekate.Graph<Key,Node<'r,'s>,DecisionResult option>
-
-             and Node<'r,'s> =
+            type Node<'r,'s> =
                 | Node
                 | Decision of DecisionValue<'s>
                 | Terminal of ('s -> Async<'r * 's>)
@@ -698,10 +695,7 @@ module Machines =
 
             (* Types *)
 
-            type Optimized<'r,'s> =
-                | Optimized of Hekate.Graph<Key,Node<'r,'s>,DecisionResult option>
-
-             and Node<'r,'s> =
+            type Node<'r,'s> =
                 | Node
                 | Decision of ('s -> Async<DecisionResult * 's>)
                 | Terminal of ('s -> Async<'r * 's>)
