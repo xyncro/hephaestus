@@ -253,7 +253,7 @@ module Specifications =
 
             /// Create a new randomly named terminal with a no-op Hephaestus function.
             let empty<'c,'r,'s> () =
-                Specification<'c,'r,'s>.Terminal (Key [ name () ], fun _ s -> async.Return (Unchecked.defaultof<'r>, s))
+                Specification<'c,'r,'s>.Terminal (Key [ name () ], fun _ s -> Job.result (Unchecked.defaultof<'r>, s))
 
         (* Decisions
 
