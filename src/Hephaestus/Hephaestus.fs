@@ -730,6 +730,9 @@ module Machines =
                     ((outward k v &&& id) >>> uncurry (inward k)) &&& id >>> uncurry Edges.addMany
                 >>> Nodes.remove k
 
+            let private remove k =
+                    Nodes.remove k
+
             (* Literal Elimination *)
 
             [<RequireQualifiedAccess>]
@@ -740,24 +743,36 @@ module Machines =
                 let private logPass =
                     Log.pass "literal elimination optimization"
 
-                let private logLiteral k =
+                let private logRootLiteral k =
                     Log.operation (
-                        Operation ("literal elimination",
+                        Operation ("root literal elimination",
+                                   Map.ofList [ "key", string k ]))
+
+                let private logChildLiteral k =
+                    Log.operation (
+                        Operation ("child literal elimination",
                                    Map.ofList [ "key", string k ]))
 
                 (* Elimination *)
 
                 let rec private eliminateLiterals (g, l) =
-                    match findLiteral g with
-                    | Some (k, v) -> eliminateLiterals (reconnect k v g, logLiteral k l)
+                    match g with
+                    | RootLiteral (k, _) -> eliminateLiterals (remove k g, logRootLiteral k l)
+                    | ChildLiteral (k, v) -> eliminateLiterals (reconnect k v g, logChildLiteral k l)
                     | _ -> g, l
 
-                and private findLiteral g =
+                and private (|RootLiteral|_|) g =
+                    literal (root) g
+
+                and private (|ChildLiteral|_|) g =
+                    literal (fun g k -> not (root g k)) g
+
+                and private literal p g =
                     Nodes.toList g
-                    |> List.tryPick (function | k, Configuration.Decision (Literal v) when not (isRoot g k) -> Some (k, v)
+                    |> List.tryPick (function | k, Configuration.Decision (Literal v) when (p g k) -> Some (k, v)
                                               | _ -> None)
-      
-                and private isRoot g k =
+
+                and private root g k =
                     match Nodes.inwardDegree k g with
                     | Some 0 | None -> true
                     | _ -> false
