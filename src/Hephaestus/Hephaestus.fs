@@ -251,9 +251,9 @@ module Specifications =
             let create<'c,'r,'s> name configure =
                 Specification<'c,'r,'s>.Terminal (name, configure)
 
-            /// Create a new randomly named terminal with a no-op Hephaestus function.
-            let empty<'c,'r,'s> () =
-                Specification<'c,'r,'s>.Terminal (Key [ name () ], fun _ s -> Job.result (Unchecked.defaultof<'r>, s))
+            /// Create a new unnamed terminal with a no-op Hephaestus function.
+            let empty<'c,'r,'s> =
+                Specification<'c,'r,'s>.Terminal (Key [], fun _ s -> Job.result (Unchecked.defaultof<'r>, s))
 
         (* Decisions
 
@@ -280,13 +280,13 @@ module Specifications =
             /// Left, and where the specification of the right tree will be an
             /// effective no-operation terminal.
             let left<'c,'r,'s> name (l: Specification<'c,'r,'s>) =
-                create name (fun _ -> Literal Left) (l, Terminal.empty ())
+                create name (fun _ -> Literal Left) (l, Terminal.empty)
 
             /// Create a new named right decision, which will always evaluate to
             /// Right, and where the specification of the left tree will be an
             /// effective no-operation terminal.
             let right<'c,'r,'s> name (r: Specification<'c,'r,'s>) =
-                create name (fun _ -> Literal Right) (Terminal.empty (), r)
+                create name (fun _ -> Literal Right) (Terminal.empty, r)
 
 (* Models
 
@@ -455,7 +455,7 @@ module Models =
         let private specification<'c,'r,'s> : (Component<'c,'r,'s> list -> Specification<'c,'r,'s>) =
                 List.map (fun c -> c.Operations)
              >> List.concat
-             >> List.fold Operation.apply (Specification.Terminal.empty ())
+             >> List.fold Operation.apply Specification.Terminal.empty
 
         let private model<'c,'r,'s> (m: Component<'c,'r,'s> list) =
             { Components = components m
@@ -754,8 +754,13 @@ module Machines =
 
                 and private findLiteral g =
                     Nodes.toList g
-                    |> List.tryPick (function | k, Configuration.Decision (Literal v) -> Some (k, v)
+                    |> List.tryPick (function | k, Configuration.Decision (Literal v) when not (isRoot g k) -> Some (k, v)
                                               | _ -> None)
+      
+                and private isRoot g k =
+                    match Nodes.inwardDegree k g with
+                    | Some 0 | None -> true
+                    | _ -> false
 
                 (* Mapping *)
 
