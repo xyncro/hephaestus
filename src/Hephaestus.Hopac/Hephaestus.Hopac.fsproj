@@ -5,14 +5,14 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>df399acf-0b6a-4272-bfb4-51d6fb935551</ProjectGuid>
+    <ProjectGuid>53d2507a-d110-4e06-b3cf-a35de7aa5583</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>Hephaestus</RootNamespace>
-    <AssemblyName>Hephaestus</AssemblyName>
+    <RootNamespace>Hephaestus.Hopac</RootNamespace>
+    <AssemblyName>Hephaestus.Hopac</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>Hephaestus</Name>
+    <Name>Hephaestus.Hopac</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -20,18 +20,22 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;Hopac</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>bin\Debug\Hephaestus.XML</DocumentationFile>
+    <DocumentationFile>bin\Debug\Hephaestus.Hopac.XML</DocumentationFile>
+    <OtherFlags>
+    </OtherFlags>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;Hopac</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>bin\Release\Hephaestus.XML</DocumentationFile>
+    <DocumentationFile>bin\Release\Hephaestus.Hopac.XML</DocumentationFile>
+    <OtherFlags>
+    </OtherFlags>
   </PropertyGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
@@ -50,7 +54,9 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <Compile Include="Hephaestus.fs" />
+    <Compile Include="..\Hephaestus\Hephaestus.fs">
+      <Link>Hephaestus.fs</Link>
+    </Compile>
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
@@ -124,6 +130,46 @@
       <ItemGroup>
         <Reference Include="Hekate">
           <HintPath>..\..\packages\common\Hekate\lib\portable-net45+netcore45+wpa81+wp8+MonoAndroid1+MonoTouch1\Hekate.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6' Or $(TargetFrameworkVersion) == 'v4.6.1' Or $(TargetFrameworkVersion) == 'v4.6.2' Or $(TargetFrameworkVersion) == 'v4.6.3')">
+      <ItemGroup>
+        <Reference Include="Hopac.Core">
+          <HintPath>..\..\packages\hopac\Hopac\lib\net45\Hopac.Core.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="Hopac.Platform">
+          <HintPath>..\..\packages\hopac\Hopac\lib\net45\Hopac.Platform.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="Hopac">
+          <HintPath>..\..\packages\hopac\Hopac\lib\net45\Hopac.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+    <When Condition="($(TargetFrameworkIdentifier) == '.NETStandard' And $(TargetFrameworkVersion) == 'v1.6') Or ($(TargetFrameworkIdentifier) == '.NETCoreApp' And $(TargetFrameworkVersion) == 'v1.0')">
+      <ItemGroup>
+        <Reference Include="Hopac.Core">
+          <HintPath>..\..\packages\hopac\Hopac\lib\netstandard1.6\Hopac.Core.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="Hopac.Platform">
+          <HintPath>..\..\packages\hopac\Hopac\lib\netstandard1.6\Hopac.Platform.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="Hopac">
+          <HintPath>..\..\packages\hopac\Hopac\lib\netstandard1.6\Hopac.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

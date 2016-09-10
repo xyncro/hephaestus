@@ -1,8 +1,16 @@
-source http://nuget.org/api/v2
+group Common
 
-nuget Aether ~> 8.1
-nuget Anat   ~> 1
-nuget Hekate ~> 3.2
+  source http://nuget.org/api/v2
+
+  nuget Aether ~> 8.1
+  nuget Anat   ~> 1
+  nuget Hekate ~> 3.2
+
+group Hopac
+
+  source http://nuget.org/api/v2
+
+  nuget Hopac  ~> 0
 
 group Build
 
@@ -10,13 +18,4 @@ group Build
 
   nuget Fake
   github xyncro/build build.fsx
-  
-group Test
-
-  framework: >= net45
-  source http://nuget.org/api/v2
-
-  nuget Unquote
-  nuget xunit
-  nuget xunit.runner.console
 

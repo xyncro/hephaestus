@@ -6,6 +6,12 @@ open Aether.Operators
 open Anat
 open Anat.Operators
 
+#if Hopac
+
+open Hopac
+
+#endif
+
 // TODO: Rework commentary
 // TODO: Pre/post-condition analysis
 
@@ -87,6 +93,18 @@ type Key =
     override x.ToString () =
         (function | Key x -> String.Join (".", Array.ofList x)) x
 
+#if Hopac
+
+type DecisionValue<'s> =
+    | Function of ('s -> Job<DecisionResult * 's>)
+    | Literal of DecisionResult
+
+    static member function_ : Epimorphism<DecisionValue<'s>,('s -> Job<DecisionResult * 's>)> =
+        (function | Function f -> Some f
+                  | _ -> None), (Function)
+
+#else
+
 type DecisionValue<'s> =
     | Function of ('s -> Async<DecisionResult * 's>)
     | Literal of DecisionResult
@@ -94,6 +112,8 @@ type DecisionValue<'s> =
     static member function_ : Epimorphism<DecisionValue<'s>,('s -> Async<DecisionResult * 's>)> =
         (function | Function f -> Some f
                   | _ -> None), (Function)
+
+#endif
 
     static member literal_ : Epimorphism<DecisionValue<'s>,DecisionResult> =
         (function | Literal l -> Some l
@@ -200,9 +220,19 @@ module Specifications =
        primitive types from which any decision graph can be constructed and
        optimized, etc. *)
 
+#if Hopac
+
+    type Specification<'c,'r,'s> =
+        | Decision of Key * ('c -> DecisionValue<'s>) * Pair<Specification<'c,'r,'s>>
+        | Terminal of Key * ('c -> 's -> Job<'r * 's>)
+
+#else
+
     type Specification<'c,'r,'s> =
         | Decision of Key * ('c -> DecisionValue<'s>) * Pair<Specification<'c,'r,'s>>
         | Terminal of Key * ('c -> 's -> Async<'r * 's>)
+
+#endif
 
         static member decision_ =
             (function | Decision (k, c, s) -> Some (k, c, s)
@@ -250,9 +280,19 @@ module Specifications =
             let create<'c,'r,'s> name configure =
                 Specification<'c,'r,'s>.Terminal (name, configure)
 
+#if Hopac
+
+            /// Create a new unnamed terminal with a no-op Hephaestus function.
+            let empty<'c,'r,'s> =
+                Specification<'c,'r,'s>.Terminal (Key [], fun _ s -> Job.result (Unchecked.defaultof<'r>, s))
+
+#else
+
             /// Create a new unnamed terminal with a no-op Hephaestus function.
             let empty<'c,'r,'s> =
                 Specification<'c,'r,'s>.Terminal (Key [], fun _ s -> async.Return (Unchecked.defaultof<'r>, s))
+
+#endif
 
         (* Decisions
 
@@ -479,10 +519,21 @@ module Prototypes =
     type Prototype<'c,'r,'s> =
         | Prototype of Hekate.Graph<Key,Node<'c,'r,'s>,DecisionResult option>
 
+#if Hopac
+
+     and Node<'c,'r,'s> =
+        | Node
+        | Decision of ('c -> DecisionValue<'s>)
+        | Terminal of ('c -> 's -> Job<'r * 's>)
+
+#else
+
      and Node<'c,'r,'s> =
         | Node
         | Decision of ('c -> DecisionValue<'s>)
         | Terminal of ('c -> 's -> Async<'r * 's>)
+
+#endif
 
     (* Creation *)
 
@@ -609,9 +660,19 @@ module Machines =
 
     (* Types *)
 
+#if Hopac
+
+    type Machine<'r,'s> =
+        | Decision of Key * ('s -> Job<DecisionResult * 's>) * Pair<Machine<'r,'s>>
+        | Terminal of Key * ('s -> Job<'r * 's>)
+
+#else
+
     type Machine<'r,'s> =
         | Decision of Key * ('s -> Async<DecisionResult * 's>) * Pair<Machine<'r,'s>>
         | Terminal of Key * ('s -> Async<'r * 's>)
+
+#endif
 
     (* Creation *)
 
@@ -625,10 +686,21 @@ module Machines =
 
             (* Types *)
 
+#if Hopac
+
+            type Node<'r,'s> =
+                | Node
+                | Decision of DecisionValue<'s>
+                | Terminal of ('s -> Job<'r * 's>)
+
+#else
+
             type Node<'r,'s> =
                 | Node
                 | Decision of DecisionValue<'s>
                 | Terminal of ('s -> Async<'r * 's>)
+
+#endif
 
             (* Logging *)
 
@@ -698,10 +770,21 @@ module Machines =
 
             (* Types *)
 
+#if Hopac
+
+            type Node<'r,'s> =
+                | Node
+                | Decision of ('s -> Job<DecisionResult * 's>)
+                | Terminal of ('s -> Job<'r * 's>)
+
+#else
+
             type Node<'r,'s> =
                 | Node
                 | Decision of ('s -> Async<DecisionResult * 's>)
                 | Terminal of ('s -> Async<'r * 's>)
+
+#endif
 
             (* Logging *)
 
@@ -952,6 +1035,19 @@ module Machines =
                 function | Machine.Decision (k, f, p), l -> decision s k f p l
                          | Machine.Terminal (k, f), l -> terminal s k f l
 
+#if Hopac
+
+            and private decision s k f p l =
+                Job.bind (
+                    function | Left, s' -> eval s' (fst p, logDecision k Left l)
+                             | Right, s' -> eval s' (snd p, logDecision k Right l)) (f s)
+
+            and private terminal s k f l =
+                Job.bind (fun (v, s) ->
+                    Job.result ((v, s), logTerminal k l)) (f s)
+
+#else
+
             and private decision s k f p l =
                 async.Bind (f s,
                     function | Left, s' -> eval s' (fst p, logDecision k Left l)
@@ -961,6 +1057,8 @@ module Machines =
                 async.Bind (f s,
                     fun (v, s) ->
                         async.Return ((v, s), logTerminal k l))
+
+#endif
 
             let evaluate s =
                     second logPass
@@ -995,6 +1093,18 @@ module Machines =
 
         (* Execution *)
 
+#if Hopac
+
+        let executeLogged machine state =
+            Job.bind (fun ((v, s), l) ->
+                Job.result ((v, Option.get l), s)) (execute state (machine, Some Log.empty))
+
+        let execute machine state =
+            Job.bind (fun ((v, s), _) ->
+                Job.result (v, s)) (execute state (machine, None))
+
+#else
+
         let executeLogged machine state =
             async.Bind (execute state (machine, Some Log.empty),
                 fun ((v, s), l) ->
@@ -1004,3 +1114,5 @@ module Machines =
             async.Bind (execute state (machine, None),
                 fun ((v, s), _) ->
                     async.Return (v, s))
+
+#endif

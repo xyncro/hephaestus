@@ -1,3 +1,13 @@
+
+
+GROUP Build
+NUGET
+  remote: http://www.nuget.org/api/v2
+    FAKE (4.39.1)
+GITHUB
+  remote: xyncro/build
+    build.fsx (11ad497d50e7b5071bea53cde53b3cfe4b113793)
+GROUP Common
 NUGET
   remote: http://www.nuget.org/api/v2
     Aether (8.1.2)
@@ -5,28 +15,7 @@ NUGET
     Hekate (3.2)
       Aether (>= 8.0.2 < 9.0)
 
-GROUP Build
+GROUP Hopac
 NUGET
   remote: http://www.nuget.org/api/v2
-    FAKE (4.28)
-GITHUB
-  remote: xyncro/build
-    build.fsx (589ed49e68b51d7de9e9de9be1adc30e26ce534d)
-GROUP Test
-FRAMEWORK: >= NET45
-NUGET
-  remote: http://www.nuget.org/api/v2
-    Unquote (3.1.1)
-    xunit (2.1)
-      xunit.assert (2.1)
-      xunit.core (2.1)
-    xunit.abstractions (2.0)
-    xunit.assert (2.1)
-    xunit.core (2.1)
-      xunit.extensibility.core (2.1)
-      xunit.extensibility.execution (2.1)
-    xunit.extensibility.core (2.1)
-      xunit.abstractions (2.0)
-    xunit.extensibility.execution (2.1)
-      xunit.extensibility.core (2.1)
-    xunit.runner.console (2.1)
+    Hopac (0.3.15)
