@@ -65,10 +65,10 @@ module internal Prelude =
         match y with
         | :? 'T as y -> (f x) = (f y)
         | _ -> false
- 
+
     let hashOn f x =
         hash (f x)
- 
+
     let compareOn f x (y: obj) =
         match y with
         | :? 'T as y -> compare (f x) (f y)
@@ -1043,8 +1043,7 @@ module Machines =
                              | Right, s' -> eval s' (snd p, logDecision k Right l)) (f s)
 
             and private terminal s k f l =
-                Job.bind (fun (v, s) ->
-                    Job.result ((v, s), logTerminal k l)) (f s)
+                Job.map (fun (v, s) -> ((v, s), logTerminal k l)) (f s)
 
 #else
 
@@ -1096,12 +1095,10 @@ module Machines =
 #if Hopac
 
         let executeLogged machine state =
-            Job.bind (fun ((v, s), l) ->
-                Job.result ((v, Option.get l), s)) (execute state (machine, Some Log.empty))
+            Job.map (fun ((v, s), l) -> ((v, Option.get l), s)) (execute state (machine, Some Log.empty))
 
         let execute machine state =
-            Job.bind (fun ((v, s), _) ->
-                Job.result (v, s)) (execute state (machine, None))
+            Job.map (fun ((v, s), _) -> (v, s)) (execute state (machine, None))
 
 #else
 
