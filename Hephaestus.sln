@@ -1,61 +1,54 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
-MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "sln", "sln", "{5844D341-72F0-423F-BC21-92EA62610D0B}"
+# Visual Studio 15
+VisualStudioVersion = 15.0.26124.0
+MinimumVisualStudioVersion = 15.0.26124.0
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C3261C5B-3F36-4B8D-9D36-4A19C47A7C99}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{D6C84380-B29D-4C14-A116-6ACC8D19AD10}"
-	ProjectSection(SolutionItems) = preProject
-		build.cmd = build.cmd
-	EndProjectSection
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hephaestus", "src\Hephaestus\Hephaestus.fsproj", "{66583BC9-105E-4C78-955A-3B8C9334A259}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{2828B2FC-4E5D-4BBD-94A2-9AC669F63EAB}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dependencies", "dependencies", "{0742FAC2-0522-4A7D-8D6B-22FDBBD9A33B}"
-	ProjectSection(SolutionItems) = preProject
-		paket.dependencies = paket.dependencies
-		paket.lock = paket.lock
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "variants", "variants", "{6BA8F52B-5E7F-4D3C-88E1-F9009FB09C5C}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "async", "async", "{FD1ED399-0CCA-4B99-8585-6A5971FD8EB6}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "hopac", "hopac", "{1890C142-EAB1-4ADA-8A6F-84BC41E0695F}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{83C15F80-F87C-46A9-9EA6-6983DEF2288B}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Hephaestus", "src\Hephaestus\Hephaestus.fsproj", "{DF399ACF-0B6A-4272-BFB4-51D6FB935551}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Hephaestus.Hopac", "src\Hephaestus.Hopac\Hephaestus.Hopac.fsproj", "{53D2507A-D110-4E06-B3CF-A35DE7AA5583}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hephaestus.Hopac", "src\Hephaestus.Hopac\Hephaestus.Hopac.fsproj", "{42918EC7-1C0E-466E-AECF-1057071CCB44}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{DF399ACF-0B6A-4272-BFB4-51D6FB935551}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DF399ACF-0B6A-4272-BFB4-51D6FB935551}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DF399ACF-0B6A-4272-BFB4-51D6FB935551}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DF399ACF-0B6A-4272-BFB4-51D6FB935551}.Release|Any CPU.Build.0 = Release|Any CPU
-		{53D2507A-D110-4E06-B3CF-A35DE7AA5583}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{53D2507A-D110-4E06-B3CF-A35DE7AA5583}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{53D2507A-D110-4E06-B3CF-A35DE7AA5583}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{53D2507A-D110-4E06-B3CF-A35DE7AA5583}.Release|Any CPU.Build.0 = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Debug|x64.ActiveCfg = Debug|x64
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Debug|x64.Build.0 = Debug|x64
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Debug|x86.ActiveCfg = Debug|x86
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Debug|x86.Build.0 = Debug|x86
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Release|Any CPU.Build.0 = Release|Any CPU
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Release|x64.ActiveCfg = Release|x64
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Release|x64.Build.0 = Release|x64
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Release|x86.ActiveCfg = Release|x86
+		{66583BC9-105E-4C78-955A-3B8C9334A259}.Release|x86.Build.0 = Release|x86
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Debug|x64.ActiveCfg = Debug|x64
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Debug|x64.Build.0 = Debug|x64
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Debug|x86.ActiveCfg = Debug|x86
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Debug|x86.Build.0 = Debug|x86
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Release|Any CPU.Build.0 = Release|Any CPU
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Release|x64.ActiveCfg = Release|x64
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Release|x64.Build.0 = Release|x64
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Release|x86.ActiveCfg = Release|x86
+		{42918EC7-1C0E-466E-AECF-1057071CCB44}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{D6C84380-B29D-4C14-A116-6ACC8D19AD10} = {5844D341-72F0-423F-BC21-92EA62610D0B}
-		{2828B2FC-4E5D-4BBD-94A2-9AC669F63EAB} = {FD1ED399-0CCA-4B99-8585-6A5971FD8EB6}
-		{0742FAC2-0522-4A7D-8D6B-22FDBBD9A33B} = {5844D341-72F0-423F-BC21-92EA62610D0B}
-		{FD1ED399-0CCA-4B99-8585-6A5971FD8EB6} = {6BA8F52B-5E7F-4D3C-88E1-F9009FB09C5C}
-		{1890C142-EAB1-4ADA-8A6F-84BC41E0695F} = {6BA8F52B-5E7F-4D3C-88E1-F9009FB09C5C}
-		{83C15F80-F87C-46A9-9EA6-6983DEF2288B} = {1890C142-EAB1-4ADA-8A6F-84BC41E0695F}
-		{DF399ACF-0B6A-4272-BFB4-51D6FB935551} = {2828B2FC-4E5D-4BBD-94A2-9AC669F63EAB}
-		{53D2507A-D110-4E06-B3CF-A35DE7AA5583} = {83C15F80-F87C-46A9-9EA6-6983DEF2288B}
+		{66583BC9-105E-4C78-955A-3B8C9334A259} = {C3261C5B-3F36-4B8D-9D36-4A19C47A7C99}
+		{42918EC7-1C0E-466E-AECF-1057071CCB44} = {C3261C5B-3F36-4B8D-9D36-4A19C47A7C99}
 	EndGlobalSection
 EndGlobal
