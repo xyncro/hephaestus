@@ -1,7 +1,6 @@
 <Project>
   <PropertyGroup>
     <TargetFrameworks>net45;netstandard1.6</TargetFrameworks>
-    <VersionPrefix>5.0.1</VersionPrefix>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <DefineConstants Condition="'$(IsHopac)' == 'true'">$(DefineConstants);Hopac</DefineConstants>
   </PropertyGroup>
