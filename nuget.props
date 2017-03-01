@@ -2,7 +2,7 @@
   <PropertyGroup>
     <VersionPrefix>5.0.1</VersionPrefix>
     <Authors>Andrew Cherry</Authors>
-    <Summary>Graph-base protocol machines for F#</Summary>
+    <Description>Graph-base protocol machines for F#</Description>
     <Copyright>Copyright © Xyncro Ltd</Copyright>
     <PackageLicenseUrl>https://github.com/xyncro/hephaestus/blob/master/LICENSE.md</PackageLicenseUrl>
     <PackageProjectUrl>https://xyncro.tech/hephaestus/</PackageProjectUrl>
