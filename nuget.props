@@ -9,7 +9,7 @@
     <PackageProjectUrl>https://xyncro.tech/hephaestus/</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/xyncro/hephaestus</RepositoryUrl>
-    <PackageTags>protocol;machine;functional;graphs;f#;fsharp</PackageTags>
+    <PackageTags>$(PackageTags);protocol;machine;functional;graphs;f#;fsharp</PackageTags>
     <PackageTags Condition="'$(Hopac)' == 'true'">$(PackageTags);hopac</PackageTags>
   </PropertyGroup>
 </Project>
