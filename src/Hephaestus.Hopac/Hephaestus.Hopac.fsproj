@@ -1,6 +1,6 @@
 <Project Sdk="FSharp.NET.Sdk;Microsoft.NET.Sdk">
   <PropertyGroup>
-    <IsHopac>true</IsHopac>
+    <Hopac>true</Hopac>
   </PropertyGroup>
   <Import Project="..\Hephaestus.Common.targets" />
 </Project>

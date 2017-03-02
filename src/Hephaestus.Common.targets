@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFrameworks>net45;netstandard1.6</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <DefineConstants Condition="'$(IsHopac)' == 'true'">$(DefineConstants);Hopac</DefineConstants>
+    <DefineConstants Condition="'$(Hopac)' == 'true'">$(DefineConstants);HOPAC</DefineConstants>
   </PropertyGroup>
 
   <Import Project="..\nuget.props" />
@@ -15,12 +15,12 @@
   <ItemGroup>
     <PackageReference Include="FSharp.NET.Sdk" Version="1.0.0" PrivateAssets="All" />
     <PackageReference Include="FSharp.Core" Version="4.*" />
-    <PackageReference Include="Aether" Version="8.1.3-alpha-*" />
+    <PackageReference Include="Aether" Version="8.2.0-alpha-*" />
     <PackageReference Include="Anat" Version="1.0.1-alpha-*" />
     <PackageReference Include="Hekate" Version="3.2.1-alpha-*" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(IsHopac)' == 'true'">
+  <ItemGroup Condition="'$(Hopac)' == 'true'">
     <PackageReference Include="Hopac" Version="0.3.24-alpha-*" />
   </ItemGroup>
 </Project>

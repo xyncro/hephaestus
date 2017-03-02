@@ -6,7 +6,7 @@ open Aether.Operators
 open Anat
 open Anat.Operators
 
-#if Hopac
+#if HOPAC
 
 open Hopac
 
@@ -93,7 +93,7 @@ type Key =
     override x.ToString () =
         (function | Key x -> String.Join (".", Array.ofList x)) x
 
-#if Hopac
+#if HOPAC
 
 type DecisionValue<'s> =
     | Function of ('s -> Job<DecisionResult * 's>)
@@ -220,7 +220,7 @@ module Specifications =
        primitive types from which any decision graph can be constructed and
        optimized, etc. *)
 
-#if Hopac
+#if HOPAC
 
     type Specification<'c,'r,'s> =
         | Decision of Key * ('c -> DecisionValue<'s>) * Pair<Specification<'c,'r,'s>>
@@ -280,7 +280,7 @@ module Specifications =
             let create<'c,'r,'s> name configure =
                 Specification<'c,'r,'s>.Terminal (name, configure)
 
-#if Hopac
+#if HOPAC
 
             /// Create a new unnamed terminal with a no-op Hephaestus function.
             let empty<'c,'r,'s> =
@@ -686,7 +686,7 @@ module Machines =
 
             (* Types *)
 
-#if Hopac
+#if HOPAC
 
             type Node<'r,'s> =
                 | Node
@@ -770,7 +770,7 @@ module Machines =
 
             (* Types *)
 
-#if Hopac
+#if HOPAC
 
             type Node<'r,'s> =
                 | Node
@@ -1035,7 +1035,7 @@ module Machines =
                 function | Machine.Decision (k, f, p), l -> decision s k f p l
                          | Machine.Terminal (k, f), l -> terminal s k f l
 
-#if Hopac
+#if HOPAC
 
             and private decision s k f p l =
                 Job.bind (
@@ -1092,7 +1092,7 @@ module Machines =
 
         (* Execution *)
 
-#if Hopac
+#if HOPAC
 
         let executeLogged machine state =
             Job.map (fun ((v, s), l) -> ((v, Option.get l), s)) (execute state (machine, Some Log.empty))
