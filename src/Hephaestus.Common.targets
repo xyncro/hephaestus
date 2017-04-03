@@ -21,6 +21,6 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(Hopac)' == 'true'">
-    <PackageReference Include="Hopac" Version="0.3.24-alpha-*" />
+    <PackageReference Include="Hopac" Version="0.3.23" />
   </ItemGroup>
 </Project>
