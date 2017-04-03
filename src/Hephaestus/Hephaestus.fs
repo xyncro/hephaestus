@@ -1,4 +1,4 @@
-module Hephaestus
+﻿module Hephaestus
 
 open System
 open Aether
@@ -523,7 +523,7 @@ module Prototypes =
     type Prototype<'c,'r,'s> =
         | Prototype of Hekate.Graph<Key,Node<'c,'r,'s>,DecisionResult option>
 
-#if Hopac
+#if HOPAC
 
      and Node<'c,'r,'s> =
         | Node
@@ -664,7 +664,7 @@ module Machines =
 
     (* Types *)
 
-#if Hopac
+#if HOPAC
 
     type Machine<'r,'s> =
         | Decision of Key * ('s -> Job<DecisionResult * 's>) * Pair<Machine<'r,'s>>
