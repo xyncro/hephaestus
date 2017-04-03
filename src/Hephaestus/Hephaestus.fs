@@ -1,4 +1,4 @@
-﻿module Hephaestus
+module Hephaestus
 
 open System
 open Aether
@@ -122,6 +122,10 @@ type DecisionValue<'s> =
  and DecisionResult =
     | Right
     | Left
+    override x.ToString () =
+        match x with
+        | Right -> "Right"
+        | Left -> "Left"
 
 (* Keys *)
 
