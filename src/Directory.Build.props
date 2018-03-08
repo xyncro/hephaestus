@@ -1,5 +1,5 @@
-<Project>
-  <PropertyGroup>
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <VersionPrefix>5.0.1</VersionPrefix>
     <Authors>Andrew Cherry</Authors>
     <Description>Graph-base protocol machines for F#</Description>
