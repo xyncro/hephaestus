@@ -2,5 +2,4 @@
   <PropertyGroup>
     <Hopac>true</Hopac>
   </PropertyGroup>
-  <!--<Import Project="..\Hephaestus.Common.targets" />-->
 </Project>
