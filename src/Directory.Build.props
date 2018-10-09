@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <DefineConstants Condition="'$(Hopac)' == 'true'">$(DefineConstants);HOPAC</DefineConstants>
 
-    <VersionPrefix>5.0.1</VersionPrefix>
+    <VersionPrefix>5.1.0</VersionPrefix>
     <Authors>Andrew Cherry</Authors>
     <Description>Graph-base protocol machines for F#</Description>
     <Description Condition="'$(Hopac)' == 'true'">$(Description) powered by the Hopac concurrency library</Description>
