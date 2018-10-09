@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <VersionPrefix>5.0.1</VersionPrefix>
+    <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DefineConstants Condition="'$(Hopac)' == 'true'">$(DefineConstants);HOPAC</DefineConstants>
+
+    <VersionPrefix>5.1.0</VersionPrefix>
     <Authors>Andrew Cherry</Authors>
     <Description>Graph-base protocol machines for F#</Description>
     <Description Condition="'$(Hopac)' == 'true'">$(Description) powered by the Hopac concurrency library</Description>
@@ -12,5 +16,30 @@
     <RepositoryUrl>https://github.com/xyncro/hephaestus</RepositoryUrl>
     <PackageTags>$(PackageTags);protocol;machine;functional;graphs;f#;fsharp</PackageTags>
     <PackageTags Condition="'$(Hopac)' == 'true'">$(PackageTags);hopac</PackageTags>
+
+    <!-- SourceLink related properties https://github.com/dotnet/SourceLink#using-sourcelink -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Hephaestus\Hephaestus.fs" />
+    <EmbeddedResource Include="**\*.resx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.3.4" />
+    <PackageReference Include="Aether" Version="[8.2.0,9)" />
+    <PackageReference Include="Anat" Version="[1.0.1,2)" />
+    <PackageReference Include="Hekate" Version="[3.2.1,4)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Hopac)' == 'true'">
+    <PackageReference Include="Hopac" Version="0.3.23" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0-*" PrivateAssets="All" />
+  </ItemGroup>
 </Project>
