@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DefineConstants Condition="'$(Hopac)' == 'true'">$(DefineConstants);HOPAC</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Hephaestus\Hephaestus.fs" />
+    <EmbeddedResource Include="**\*.resx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.3.4" />
+    <PackageReference Include="Aether" Version="[8.2.0,9)" />
+    <PackageReference Include="Anat" Version="[1.0.1,2)" />
+    <PackageReference Include="Hekate" Version="[3.2.1,4)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Hopac)' == 'true'">
+    <PackageReference Include="Hopac" Version="0.3.23" />
+  </ItemGroup>
+</Project>
