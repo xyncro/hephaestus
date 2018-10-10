@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <VersionPrefix>5.1.0</VersionPrefix>
+    <VersionPrefix>5.1.1</VersionPrefix>
     <Authors>Andrew Cherry</Authors>
     <Description>Graph-base protocol machines for F#</Description>
     <Description Condition="'$(Hopac)' == 'true'">$(Description) powered by the Hopac concurrency library</Description>
