@@ -18,3 +18,4 @@ if ($env:appveyor){
 
 dotnet build -c Release Hephaestus.sln /p:Version=$version$versionSuffix
 dotnet pack --no-build -c Release src/Hephaestus /p:Version=$version$versionSuffix -o $psscriptroot/bin
+dotnet pack --no-build -c Release src/Hephaestus.Hopac /p:Version=$version$versionSuffix -o $psscriptroot/bin
